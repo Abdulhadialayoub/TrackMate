@@ -29,7 +29,6 @@ TrackMate, birden fazla şirketin müşteri, ürün ve fatura yönetimini entegr
 ```
 TrackMate/
 │── backend/              # ASP.NET Backend API  
-│   └── database/         # MS SQL Veritabanı Yapıları  
 │── frontend-web/         # React Web Uygulaması  
 │── frontend-mobile/      # React Native Mobil Uygulaması  
 │── docs/                 # Proje dökümantasyonları  
