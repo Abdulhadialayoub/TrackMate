@@ -59,8 +59,8 @@ npx react-native run-ios       # iOS için
 ```
 
 ## 📅 İş Takvimi
-- [+] **1. Hafta**: Gereksinim analizi, ER diagramı, veritabanı tasarımı
-- [+] **2. Hafta**: JWT Kimlik Doğrulama, Şirket ve Kullanıcı Yönetimi
+- [x] **1. Hafta**: Gereksinim analizi, ER diagramı, veritabanı tasarımı
+- [x] **2. Hafta**: JWT Kimlik Doğrulama, Şirket ve Kullanıcı Yönetimi
 - [ ] **3. Hafta**: Ürün & Sipariş API, E-posta Bildirim Sistemi
 - [ ] **4. Hafta**: 
   - [ ] Admin Panel Tasarımı & API Entegrasyonu (Web)
