@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TrackMate.API.Data;
 using TrackMate.API.Models.DTOs;
 using TrackMate.API.Models.Entities;
+using TrackMate.API.Interfaces;
 
 namespace TrackMate.API.Services
 {
@@ -20,23 +21,15 @@ namespace TrackMate.API.Services
             {
                 Name = createCompanyDto.Name,
                 Phone = createCompanyDto.Phone,
-                CreatedDate = DateTime.UtcNow,
                 TaxId = createCompanyDto.TaxId,
-                Address = createCompanyDto.Address
+                Address = createCompanyDto.Address,
+                CreatedDate = DateTime.UtcNow
             };
 
             _context.Companies.Add(company);
             await _context.SaveChangesAsync();
 
-            return new CompanyDto
-            {
-                Id = company.Id,
-                Name = company.Name,
-                Phone = company.Phone,
-                TaxId = company.TaxId,
-                Address = company.Address,
-                CreatedDate = company.CreatedDate
-            };
+            return await GetCompanyAsync(company.Id);
         }
 
         public async Task<CompanyDto?> GetCompanyAsync(int id)
@@ -58,6 +51,7 @@ namespace TrackMate.API.Services
         public async Task<IEnumerable<CompanyDto>> GetCompaniesAsync()
         {
             var companies = await _context.Companies.ToListAsync();
+
             return companies.Select(c => new CompanyDto
             {
                 Id = c.Id,
@@ -65,6 +59,23 @@ namespace TrackMate.API.Services
                 Phone = c.Phone,
                 TaxId = c.TaxId,
                 Address = c.Address,
+                CreatedDate = c.CreatedDate
+            });
+        }
+
+        public async Task<IEnumerable<CompanyDto>> GetCompaniesByIdAsync(int companyId)
+        {
+            var companies = await _context.Companies
+                .Where(c => c.Id == companyId)
+                .ToListAsync();
+
+            return companies.Select(c => new CompanyDto
+            {
+                Id = c.Id,
+                Name = c.Name,
+                TaxId = c.TaxId,
+                Address = c.Address,
+                Phone = c.Phone,
                 CreatedDate = c.CreatedDate
             });
         }
@@ -81,15 +92,7 @@ namespace TrackMate.API.Services
 
             await _context.SaveChangesAsync();
 
-            return new CompanyDto
-            {
-                Id = company.Id,
-                Name = company.Name,
-                Phone = company.Phone,
-                TaxId = company.TaxId,
-                Address = company.Address,
-                CreatedDate = company.CreatedDate
-            };
+            return await GetCompanyAsync(company.Id);
         }
 
         public async Task<bool> DeleteCompanyAsync(int id)

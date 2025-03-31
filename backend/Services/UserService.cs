@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
-using Org.BouncyCastle.Crypto.Generators;
+using TrackMate.API.Services;
 using TrackMate.API.Data;
 using TrackMate.API.Models.DTOs;
 using TrackMate.API.Models.Entities;
+using TrackMate.API.Interfaces;
+using BC = BCrypt.Net.BCrypt;
 
 namespace TrackMate.API.Services
 {
@@ -20,8 +22,10 @@ namespace TrackMate.API.Services
             var user = new User
             {
                 Email = createUserDto.Email,
-                Password = BCrypt.Net.BCrypt.HashPassword(createUserDto.Password),
-                Fullname = createUserDto.Fullname,
+                UserName = createUserDto.UserName,
+                FirstName = createUserDto.FirstName,
+                LastName = createUserDto.LastName,
+                PasswordHash = BC.HashPassword(createUserDto.Password),
                 Role = createUserDto.Role,
                 CompanyId = createUserDto.CompanyId,
                 CreatedDate = DateTime.UtcNow
@@ -30,15 +34,7 @@ namespace TrackMate.API.Services
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
-            return new UserDto
-            {
-                Id = user.Id,
-                Email = user.Email,
-                Fullname = user.Fullname,
-                Role = user.Role,
-                CompanyId = user.CompanyId,
-                CreatedDate = user.CreatedDate
-            };
+            return await GetUserAsync(user.Id);
         }
 
         public async Task<UserDto?> GetUserAsync(int id)
@@ -53,7 +49,31 @@ namespace TrackMate.API.Services
             {
                 Id = user.Id,
                 Email = user.Email,
-                Fullname = user.Fullname,
+                UserName = user.UserName,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                Role = user.Role,
+                CompanyId = user.CompanyId,
+                CompanyName = user.Company?.Name,
+                CreatedDate = user.CreatedDate
+            };
+        }
+
+        public async Task<UserDto?> GetUserByEmailAsync(string email)
+        {
+            var user = await _context.Users
+                .Include(u => u.Company)
+                .FirstOrDefaultAsync(u => u.Email == email);
+
+            if (user == null) return null;
+
+            return new UserDto
+            {
+                Id = user.Id,
+                Email = user.Email,
+                UserName = user.UserName,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
                 Role = user.Role,
                 CompanyId = user.CompanyId,
                 CompanyName = user.Company?.Name,
@@ -71,7 +91,30 @@ namespace TrackMate.API.Services
             {
                 Id = u.Id,
                 Email = u.Email,
-                Fullname = u.Fullname,
+                UserName = u.UserName,
+                FirstName = u.FirstName,
+                LastName = u.LastName,
+                Role = u.Role,
+                CompanyId = u.CompanyId,
+                CompanyName = u.Company?.Name,
+                CreatedDate = u.CreatedDate
+            });
+        }
+
+        public async Task<IEnumerable<UserDto>> GetUsersByCompanyAsync(int companyId)
+        {
+            var users = await _context.Users
+                .Include(u => u.Company)
+                .Where(u => u.CompanyId == companyId)
+                .ToListAsync();
+
+            return users.Select(u => new UserDto
+            {
+                Id = u.Id,
+                Email = u.Email,
+                UserName = u.UserName,
+                FirstName = u.FirstName,
+                LastName = u.LastName,
                 Role = u.Role,
                 CompanyId = u.CompanyId,
                 CompanyName = u.Company?.Name,
@@ -85,26 +128,20 @@ namespace TrackMate.API.Services
             if (user == null) return null;
 
             user.Email = updateUserDto.Email;
-            user.Fullname = updateUserDto.Fullname;
+            user.UserName = updateUserDto.UserName;
+            user.FirstName = updateUserDto.FirstName;
+            user.LastName = updateUserDto.LastName;
             user.Role = updateUserDto.Role;
             user.CompanyId = updateUserDto.CompanyId;
 
             if (!string.IsNullOrEmpty(updateUserDto.Password))
             {
-                user.Password = BCrypt.Net.BCrypt.HashPassword(updateUserDto.Password);
+                user.PasswordHash = BC.HashPassword(updateUserDto.Password);
             }
 
             await _context.SaveChangesAsync();
 
-            return new UserDto
-            {
-                Id = user.Id,
-                Email = user.Email,
-                Fullname = user.Fullname,
-                Role = user.Role,
-                CompanyId = user.CompanyId,
-                CreatedDate = user.CreatedDate
-            };
+            return await GetUserAsync(user.Id);
         }
 
         public async Task<bool> DeleteUserAsync(int id)
@@ -115,6 +152,14 @@ namespace TrackMate.API.Services
             _context.Users.Remove(user);
             await _context.SaveChangesAsync();
             return true;
+        }
+
+        public async Task<bool> ValidateUserCredentialsAsync(string email, string password)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null) return false;
+
+            return BC.Verify(password, user.PasswordHash);
         }
     }
 } 

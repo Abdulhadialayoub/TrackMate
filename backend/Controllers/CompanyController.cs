@@ -1,14 +1,16 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using TrackMate.API.Models.DTOs;
 using TrackMate.API.Services;
+using TrackMate.API.Interfaces;
 
 namespace TrackMate.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
     [Authorize]
-    public class CompanyController : ControllerBase
+    public class CompanyController : BaseController
     {
         private readonly ICompanyService _companyService;
 
@@ -18,7 +20,7 @@ namespace TrackMate.API.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Dev")]
         public async Task<ActionResult<CompanyDto>> CreateCompany([FromBody] CreateCompanyDto createCompanyDto)
         {
             try
@@ -37,8 +39,20 @@ namespace TrackMate.API.Controllers
         {
             try
             {
+                var userRole = GetCurrentUserRole();
+                var userCompanyId = GetCurrentUserCompanyId();
+
                 var companies = await _companyService.GetCompaniesAsync();
-                return Ok(companies);
+                
+                // Dev rolü tüm şirketleri görebilir
+                if (userRole == "Dev")
+                {
+                    return Ok(companies);
+                }
+
+                // Admin ve User sadece kendi şirketlerini görebilir
+                var filteredCompanies = companies.Where(c => c.Id == userCompanyId);
+                return Ok(filteredCompanies);
             }
             catch (Exception ex)
             {
@@ -51,11 +65,26 @@ namespace TrackMate.API.Controllers
         {
             try
             {
+                var userRole = GetCurrentUserRole();
+                var userCompanyId = GetCurrentUserCompanyId();
+
+                // Dev rolü herhangi bir şirketi görüntüleyebilir
+                if (userRole != "Dev" && userCompanyId != id)
+                {
+                    return Forbid();
+                }
+
                 var company = await _companyService.GetCompanyAsync(id);
                 if (company == null)
                 {
-                    return NotFound(new { message = $"Company with ID {id} not found." });
+                    return NotFound($"Company with ID {id} not found.");
                 }
+
+                if (!IsAuthorizedForCompany(company.Id))
+                {
+                    return Forbid();
+                }
+
                 return Ok(company);
             }
             catch (Exception ex)
@@ -65,16 +94,31 @@ namespace TrackMate.API.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Dev")]
         public async Task<ActionResult<CompanyDto>> UpdateCompany(int id, [FromBody] UpdateCompanyDto updateCompanyDto)
         {
             try
             {
+                var userRole = GetCurrentUserRole();
+                var userCompanyId = GetCurrentUserCompanyId();
+
+                // Dev rolü herhangi bir şirketi güncelleyebilir
+                if (userRole != "Dev" && userCompanyId != id)
+                {
+                    return Forbid();
+                }
+
+                if (!IsAuthorizedForCompany(id))
+                {
+                    return Forbid();
+                }
+
                 var company = await _companyService.UpdateCompanyAsync(id, updateCompanyDto);
                 if (company == null)
                 {
-                    return NotFound(new { message = $"Company with ID {id} not found." });
+                    return NotFound($"Company with ID {id} not found.");
                 }
+
                 return Ok(company);
             }
             catch (Exception ex)
@@ -84,16 +128,31 @@ namespace TrackMate.API.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Dev")]
         public async Task<ActionResult> DeleteCompany(int id)
         {
             try
             {
+                var userRole = GetCurrentUserRole();
+                var userCompanyId = GetCurrentUserCompanyId();
+
+                // Dev rolü herhangi bir şirketi silmeye yetkili
+                if (userRole != "Dev" && userCompanyId != id)
+                {
+                    return Forbid();
+                }
+
+                if (!IsAuthorizedForCompany(id))
+                {
+                    return Forbid();
+                }
+
                 var result = await _companyService.DeleteCompanyAsync(id);
                 if (!result)
                 {
-                    return NotFound(new { message = $"Company with ID {id} not found." });
+                    return NotFound($"Company with ID {id} not found.");
                 }
+
                 return NoContent();
             }
             catch (Exception ex)

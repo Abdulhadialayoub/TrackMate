@@ -32,5 +32,18 @@ namespace TrackMate.API.Controllers
             var companyIdClaim = User.FindFirst("CompanyId");
             return companyIdClaim != null ? int.Parse(companyIdClaim.Value) : 0;
         }
+
+        protected bool IsAuthorizedForCompany(int companyId)
+        {
+            var userRole = GetCurrentUserRole();
+            var userCompanyId = GetCurrentUserCompanyId();
+
+            // Dev rolü tüm şirketlere erişebilir
+            if (userRole == "Dev")
+                return true;
+
+            // Diğer roller sadece kendi şirketlerine erişebilir
+            return userCompanyId == companyId;
+        }
     }
 } 

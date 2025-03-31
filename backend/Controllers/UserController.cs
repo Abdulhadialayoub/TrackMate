@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using TrackMate.API.Models.DTOs;
 using TrackMate.API.Services;
+using TrackMate.API.Interfaces; // Add this line
 
 namespace TrackMate.API.Controllers
 {
@@ -84,4 +85,4 @@ namespace TrackMate.API.Controllers
             return NoContent();
         }
     }
-} 
+}

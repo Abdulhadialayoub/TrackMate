@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <Folder Include="Controllers\" />
+    <Folder Include="Migrations\" />
     <Folder Include="Models\DTOs\" />
     <Folder Include="Configurations\" />
     <Folder Include="Helpers\" />
