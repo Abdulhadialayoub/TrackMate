@@ -1,7 +1,12 @@
-using System.Net;
+using System;
+using System.Collections.Generic;
 using System.Text.Json;
-using FluentValidation;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using TrackMate.API.Exceptions;
+using TrackMate.API.Models.DTOs;
 
 namespace TrackMate.API.Middleware
 {
@@ -9,11 +14,16 @@ namespace TrackMate.API.Middleware
     {
         private readonly RequestDelegate _next;
         private readonly ILogger<ExceptionHandlingMiddleware> _logger;
+        private readonly IWebHostEnvironment _env;
 
-        public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger)
+        public ExceptionHandlingMiddleware(
+            RequestDelegate next, 
+            ILogger<ExceptionHandlingMiddleware> logger, 
+            IWebHostEnvironment env)
         {
             _next = next;
             _logger = logger;
+            _env = env;
         }
 
         public async Task InvokeAsync(HttpContext context)
@@ -22,45 +32,51 @@ namespace TrackMate.API.Middleware
             {
                 await _next(context);
             }
+            catch (ApiException ex)
+            {
+                _logger.LogWarning(ex, "API Exception: {Message}", ex.Message);
+                await WriteResponseAsync(context, ex.StatusCode, ex.Message, ex.Code);
+            }
             catch (Exception ex)
             {
-                context.Response.ContentType = "application/json";
-                context.Response.StatusCode = ex switch
-                {
-                    NotFoundException => (int)HttpStatusCode.NotFound,
-                    FluentValidation.ValidationException => (int)HttpStatusCode.BadRequest,
-                    _ => (int)HttpStatusCode.InternalServerError
-                };
-
-                object response;
-                if (ex is FluentValidation.ValidationException validationException)
-                {
-                    var errors = validationException.Errors.GroupBy(x => x.PropertyName)
-                        .ToDictionary(
-                            g => g.Key,
-                            g => g.Select(x => x.ErrorMessage).ToArray()
-                        );
-
-                    response = new
-                    {
-                        status = context.Response.StatusCode,
-                        errors = errors,
-                        title = "Validation Error"
-                    };
-                }
-                else
-                {
-                    response = new
-                    {
-                        status = context.Response.StatusCode,
-                        message = ex.Message,
-                        title = ex.GetType().Name
-                    };
-                }
-
-                _logger.LogError(ex, "An error occurred: {Message}", ex.Message);
-                await context.Response.WriteAsync(JsonSerializer.Serialize(response));
+                _logger.LogError(ex, "Unhandled Exception");
+                await WriteInternalServerErrorResponseAsync(context, ex);
             }
+        }
+
+        private async Task WriteResponseAsync(HttpContext context, int statusCode, string message, string errorCode)
+        {
+            context.Response.ContentType = "application/json";
+            context.Response.StatusCode = statusCode;
+
+            var response = ResponseDto<object>.ErrorResponse(
+                message, 
+                new List<string> { $"Error Code: {errorCode}" }
+            );
+
+            await context.Response.WriteAsync(JsonSerializer.Serialize(response, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            }));
+        }
+
+        private async Task WriteInternalServerErrorResponseAsync(HttpContext context, Exception ex)
+        {
+            context.Response.ContentType = "application/json";
+            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+
+            var response = _env.IsDevelopment() 
+                ? ResponseDto<object>.ErrorResponse(
+                    "An internal server error occurred.", 
+                    new List<string> { ex.Message, ex.StackTrace ?? "" })
+                : ResponseDto<object>.ErrorResponse(
+                    "An internal server error occurred.",
+                    new List<string> { "Please contact administrator if the problem persists." });
+
+            await context.Response.WriteAsync(JsonSerializer.Serialize(response, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            }));
         }
     }
 } 

@@ -1,6 +1,6 @@
-using System.Net;
+using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
-using FluentValidation;
+using TrackMate.API.Models.DTOs;
 
 namespace TrackMate.API.Middleware
 {
@@ -20,27 +20,41 @@ namespace TrackMate.API.Middleware
             try
             {
                 await _next(context);
-            }
-            catch (FluentValidation.ValidationException ex)
-            {
-                context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                context.Response.ContentType = "application/json";
 
-                var errors = ex.Errors.GroupBy(x => x.PropertyName)
-                    .ToDictionary(
-                        g => g.Key,
-                        g => g.Select(x => x.ErrorMessage).ToArray()
-                    );
-
-                var response = new
+                if (context.Response.StatusCode == StatusCodes.Status400BadRequest)
                 {
-                    status = 400,
-                    errors = errors,
-                    title = "Validation Error"
-                };
-
-                await context.Response.WriteAsync(JsonSerializer.Serialize(response));
+                    var problemDetails = context.Items["ValidationProblemDetails"] as ValidationProblemDetails;
+                    if (problemDetails != null)
+                    {
+                        var errors = problemDetails.Errors.SelectMany(e => e.Value).ToList();
+                        await WriteResponseAsync(context, StatusCodes.Status400BadRequest, "Validation failed", errors);
+                    }
+                }
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred in ValidationMiddleware");
+                await _next(context);
+            }
+        }
+
+        private static async Task WriteResponseAsync(HttpContext context, int statusCode, string message, List<string>? errors = null)
+        {
+            context.Response.ContentType = "application/json";
+            context.Response.StatusCode = statusCode;
+
+            var response = new ResponseDto<object>
+            {
+                Success = false,
+                Message = message,
+                Data = null,
+                Errors = errors
+            };
+
+            await context.Response.WriteAsync(JsonSerializer.Serialize(response, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            }));
         }
     }
 } 

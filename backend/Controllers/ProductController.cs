@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TrackMate.API.Models.DTOs;
 using TrackMate.API.Interfaces;
+using TrackMate.API.Exceptions;
+using Microsoft.Extensions.Logging;
 
 namespace TrackMate.API.Controllers
 {
@@ -11,75 +13,140 @@ namespace TrackMate.API.Controllers
     public class ProductController : BaseController
     {
         private readonly IProductService _productService;
+        private readonly ILogger<ProductController> _logger;
 
-        public ProductController(IProductService productService)
+        public ProductController(
+            IProductService productService,
+            ILogger<ProductController> logger)
         {
             _productService = productService;
-        }
-
-        [HttpPost]
-        [Authorize(Roles = "Admin,Dev")]
-        public async Task<ActionResult<ProductDto>> CreateProduct(CreateProductDto createProductDto)
-        {
-            var product = await _productService.CreateProductAsync(createProductDto);
-            return CreatedAtAction(nameof(GetProduct), new { id = product.Id }, product);
-        }
-
-        [HttpGet("{id}")]
-        public async Task<ActionResult<ProductDto>> GetProduct(int id)
-        {
-            var product = await _productService.GetProductAsync(id);
-            if (product == null)
-                return NotFound();
-
-            if (!IsAuthorizedForCompany(product.CompanyId))
-                return Forbid();
-
-            return Ok(product);
+            _logger = logger;
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<ProductDto>>> GetProducts()
+        public async Task<ActionResult<IEnumerable<ProductDto>>> GetAll()
         {
-            var products = await _productService.GetProductsAsync();
-            var authorizedProducts = products.Where(p => IsAuthorizedForCompany(p.CompanyId));
-            return Ok(authorizedProducts);
+            return await ExecuteAsync(async () => await _productService.GetAllAsync());
+        }
+
+        [HttpGet("{id}")]
+        public async Task<ActionResult<ProductDto>> GetById(int id)
+        {
+            return await ExecuteAsync(async () => await _productService.GetByIdAsync(id));
+        }
+
+        [HttpGet("company/{companyId}")]
+        public async Task<ActionResult<IEnumerable<ProductDto>>> GetByCompanyId(int companyId)
+        {
+            return await ExecuteWithValidationAsync(
+                companyId,
+                async () => await _productService.GetByCompanyIdAsync(companyId)
+            );
+        }
+
+        [HttpGet("category/{categoryId}")]
+        public async Task<ActionResult<IEnumerable<ProductDto>>> GetByCategoryId(int categoryId)
+        {
+            var product = await _productService.GetByIdAsync(categoryId);
+            if (product == null)
+            {
+                return NotFound(new { message = "Category not found", code = "CATEGORY_NOT_FOUND" });
+            }
+
+            return await ExecuteWithValidationAsync(
+                product.CompanyId,
+                async () => await _productService.GetByCategoryIdAsync(categoryId)
+            );
+        }
+
+        [HttpPost]
+        public async Task<ActionResult<ProductDto>> Create([FromBody] CreateProductDto createProductDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            return await ExecuteCreateAsync(
+                async () => await _productService.CreateAsync(createProductDto),
+                nameof(GetById),
+                new { id = 0 }
+            );
         }
 
         [HttpPut("{id}")]
-        [Authorize(Roles = "Admin,Dev")]
-        public async Task<ActionResult<ProductDto>> UpdateProduct(int id, UpdateProductDto updateProductDto)
+        public async Task<ActionResult<ProductDto>> Update(int id, [FromBody] UpdateProductDto updateProductDto)
         {
-            var product = await _productService.GetProductAsync(id);
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var product = await _productService.GetByIdAsync(id);
             if (product == null)
-                return NotFound();
+            {
+                return NotFound(new { message = "Product not found", code = "PRODUCT_NOT_FOUND" });
+            }
 
-            if (!IsAuthorizedForCompany(product.CompanyId))
-                return Forbid();
-
-            var updatedProduct = await _productService.UpdateProductAsync(id, updateProductDto);
-            if (updatedProduct == null)
-                return NotFound();
-
-            return Ok(updatedProduct);
+            return await ExecuteWithValidationAsync(
+                product.CompanyId,
+                async () => await _productService.UpdateAsync(id, updateProductDto)
+            );
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Admin,Dev")]
-        public async Task<ActionResult> DeleteProduct(int id)
+        public async Task<IActionResult> Delete(int id)
         {
-            var product = await _productService.GetProductAsync(id);
+            var product = await _productService.GetByIdAsync(id);
             if (product == null)
-                return NotFound();
+            {
+                return NotFound(new { message = "Product not found", code = "PRODUCT_NOT_FOUND" });
+            }
 
-            if (!IsAuthorizedForCompany(product.CompanyId))
-                return Forbid();
+            return await ExecuteWithValidationAsync(
+                product.CompanyId,
+                async () => await _productService.DeleteAsync(id)
+            );
+        }
 
-            var result = await _productService.DeleteProductAsync(id);
-            if (!result)
-                return NotFound();
+        [HttpPut("{id}/status")]
+        public async Task<ActionResult<ProductDto>> UpdateStatus(int id, [FromBody] UpdateProductStatusDto statusDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
 
-            return NoContent();
+            var product = await _productService.GetByIdAsync(id);
+            if (product == null)
+            {
+                return NotFound(new { message = "Product not found", code = "PRODUCT_NOT_FOUND" });
+            }
+
+            return await ExecuteWithValidationAsync(
+                product.CompanyId,
+                async () => await _productService.UpdateStatusAsync(id, statusDto.Status)
+            );
+        }
+
+        [HttpPut("{id}/stock")]
+        public async Task<ActionResult<ProductDto>> UpdateStock(int id, [FromBody] UpdateProductStockDto stockDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var product = await _productService.GetByIdAsync(id);
+            if (product == null)
+            {
+                return NotFound(new { message = "Product not found", code = "PRODUCT_NOT_FOUND" });
+            }
+
+            return await ExecuteWithValidationAsync(
+                product.CompanyId,
+                async () => await _productService.UpdateStockAsync(id, stockDto.Quantity)
+            );
         }
     }
 } 

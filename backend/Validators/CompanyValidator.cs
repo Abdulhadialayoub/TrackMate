@@ -15,9 +15,9 @@ namespace TrackMate.API.Validators
                 .NotEmpty().WithMessage("Phone number is required")
                 .MaximumLength(20).WithMessage("Phone number cannot exceed 20 characters");
 
-            RuleFor(x => x.TaxId)
-                .NotEmpty().WithMessage("Tax ID is required")
-                .MaximumLength(50).WithMessage("Tax ID cannot exceed 50 characters");
+            RuleFor(x => x.TaxNumber)
+                .NotEmpty().WithMessage("Tax Number is required")
+                .MaximumLength(50).WithMessage("Tax Number cannot exceed 50 characters");
 
             RuleFor(x => x.Address)
                 .NotEmpty().WithMessage("Address is required")
@@ -37,9 +37,9 @@ namespace TrackMate.API.Validators
                 .NotEmpty().WithMessage("Phone number is required")
                 .MaximumLength(20).WithMessage("Phone number cannot exceed 20 characters");
 
-            RuleFor(x => x.TaxId)
-                .NotEmpty().WithMessage("Tax ID is required")
-                .MaximumLength(50).WithMessage("Tax ID cannot exceed 50 characters");
+            RuleFor(x => x.TaxNumber)
+                .NotEmpty().WithMessage("Tax Number is required")
+                .MaximumLength(50).WithMessage("Tax Number cannot exceed 50 characters");
 
             RuleFor(x => x.Address)
                 .NotEmpty().WithMessage("Address is required")

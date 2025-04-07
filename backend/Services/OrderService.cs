@@ -1,186 +1,390 @@
 using Microsoft.EntityFrameworkCore;
 using TrackMate.API.Data;
+using TrackMate.API.Exceptions;
+using TrackMate.API.Interfaces;
 using TrackMate.API.Models.DTOs;
 using TrackMate.API.Models.Entities;
-using TrackMate.API.Interfaces;
+using TrackMate.API.Models.Enums;
+using AutoMapper;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace TrackMate.API.Services
 {
-    public class OrderService : IOrderService
+    public class OrderService : BaseService<Order, OrderDto, CreateOrderDto, UpdateOrderDto>, IOrderService
     {
-        private readonly TrackMateDbContext _context;
-
-        public OrderService(TrackMateDbContext context)
+        public OrderService(TrackMateDbContext context, IMapper mapper, ILogger<OrderService> logger)
+            : base(context, mapper, logger)
         {
-            _context = context;
         }
 
-        public async Task<OrderDto> CreateOrderAsync(CreateOrderDto createOrderDto)
+        public override async Task<OrderDto> GetByIdAsync(int id)
         {
-            var order = new Order
+            try
             {
-                OrderNumber = GenerateOrderNumber(),
-                CustomerId = createOrderDto.CustomerId,
-                CompanyId = createOrderDto.CompanyId,
-                Status = "Pending",
-                OrderDate = DateTime.UtcNow,
-                CreatedDate = DateTime.UtcNow
-            };
+                _logger.LogInformation("Fetching order: {Id}", id);
 
-            _context.Orders.Add(order);
-            await _context.SaveChangesAsync();
+                var order = await _dbSet
+                    .Include(o => o.Company)
+                    .Include(o => o.Customer)
+                    .Include(o => o.OrderItems)
+                        .ThenInclude(oi => oi.Product)
+                    .FirstOrDefaultAsync(o => o.Id == id && !o.IsDeleted);
 
-            // Add order items
-            foreach (var item in createOrderDto.OrderItems)
+                if (order == null)
+                {
+                    throw new ApiException("Order not found", 404, "ORDER_NOT_FOUND");
+                }
+
+                return _mapper.Map<OrderDto>(order);
+            }
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Error fetching order: {Id}", id);
+                throw;
+            }
+        }
+
+        public override async Task<IEnumerable<OrderDto>> GetByCompanyIdAsync(int companyId)
+        {
+            try
+            {
+                _logger.LogInformation("Fetching orders for company: {CompanyId}", companyId);
+
+                var orders = await _dbSet
+                    .Include(o => o.Company)
+                    .Include(o => o.Customer)
+                    .Include(o => o.OrderItems)
+                        .ThenInclude(oi => oi.Product)
+                    .Where(o => o.CompanyId == companyId && !o.IsDeleted)
+                    .OrderByDescending(o => o.CreatedAt)
+                    .ToListAsync();
+
+                return _mapper.Map<IEnumerable<OrderDto>>(orders);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching orders for company: {CompanyId}", companyId);
+                throw;
+            }
+        }
+
+        public override async Task<OrderDto> CreateAsync(CreateOrderDto dto)
+        {
+            try
+            {
+                _logger.LogInformation("Creating new order for company: {CompanyId}", dto.CompanyId);
+
+                var company = await _context.Companies
+                    .FirstOrDefaultAsync(c => c.Id == dto.CompanyId && !c.IsDeleted);
+
+                if (company == null)
+                {
+                    throw new ApiException("Company not found", 404, "COMPANY_NOT_FOUND");
+                }
+
+                var customer = await _context.Customers
+                    .FirstOrDefaultAsync(c => c.Id == dto.CustomerId && c.CompanyId == dto.CompanyId && !c.IsDeleted);
+
+                if (customer == null)
+                {
+                    throw new ApiException("Customer not found", 404, "CUSTOMER_NOT_FOUND");
+                }
+
+                var orderNumber = await GenerateOrderNumberAsync(dto.CompanyId);
+                decimal subTotal = CalculateSubTotal(dto.Items);
+                decimal taxAmount = 0;
+                decimal total = CalculateTotal(subTotal, taxAmount, 0);
+
+                var order = _mapper.Map<Order>(dto);
+                order.OrderNumber = orderNumber;
+                order.SubTotal = subTotal;
+                order.TaxAmount = taxAmount;
+                order.Total = total;
+                order.Status = "Draft";
+                order.CreatedAt = DateTime.UtcNow;
+
+                _context.Orders.Add(order);
+                await _context.SaveChangesAsync();
+
+                if (dto.Items?.Any() == true)
+                {
+                    var orderItems = new List<OrderItem>();
+                    foreach (var item in dto.Items)
+                    {
+                        var product = await _context.Products
+                            .FirstOrDefaultAsync(p => p.Id == item.ProductId && p.CompanyId == dto.CompanyId && !p.IsDeleted);
+
+                        if (product == null)
+                        {
+                            throw new ApiException($"Product not found: {item.ProductId}", 404, "PRODUCT_NOT_FOUND");
+                        }
+
+                        var orderItem = new OrderItem
+                        {
+                            OrderId = order.Id,
+                            ProductId = item.ProductId,
+                            Quantity = (int)item.Quantity,
+                            UnitPrice = item.UnitPrice,
+                            Total = item.Quantity * item.UnitPrice,
+                            CreatedAt = DateTime.UtcNow
+                        };
+
+                        orderItems.Add(orderItem);
+                    }
+
+                    _context.OrderItems.AddRange(orderItems);
+                    await _context.SaveChangesAsync();
+                }
+
+                return await GetByIdAsync(order.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating order for company: {CompanyId}", dto.CompanyId);
+                throw;
+            }
+        }
+
+        public async Task<string> GenerateOrderNumberAsync(int companyId)
+        {
+            var lastOrder = await _dbSet
+                .Where(o => o.CompanyId == companyId && !o.IsDeleted)
+                .OrderByDescending(o => o.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            int nextNumber = 1;
+            if (lastOrder != null)
+            {
+                var parts = lastOrder.OrderNumber.Split('-');
+                if (parts.Length == 3 && int.TryParse(parts[2], out int lastNumber))
+                {
+                    nextNumber = lastNumber + 1;
+                }
+            }
+
+            return $"ORD-{companyId:D4}-{nextNumber:D6}";
+        }
+
+        private decimal CalculateSubTotal(IEnumerable<CreateOrderItemDto> items)
+        {
+            if (items == null || !items.Any())
+                return 0;
+
+            return items.Sum(item => item.Quantity * item.UnitPrice);
+        }
+
+        private decimal CalculateTaxAmount(decimal subTotal, decimal taxRate)
+        {
+            return subTotal * (taxRate / 100);
+        }
+
+        private decimal CalculateTotal(decimal subTotal, decimal taxAmount, decimal shippingCost)
+        {
+            return subTotal + taxAmount + shippingCost;
+        }
+
+        public async Task<IEnumerable<OrderDto>> GetByCustomerIdAsync(int customerId)
+        {
+            try
+            {
+                _logger.LogInformation("Fetching orders for customer: {CustomerId}", customerId);
+
+                var orders = await _dbSet
+                    .Include(o => o.Company)
+                    .Include(o => o.Customer)
+                    .Include(o => o.OrderItems)
+                        .ThenInclude(oi => oi.Product)
+                    .Where(o => o.CustomerId == customerId && !o.IsDeleted)
+                    .OrderByDescending(o => o.CreatedAt)
+                    .ToListAsync();
+
+                return _mapper.Map<IEnumerable<OrderDto>>(orders);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching orders for customer: {CustomerId}", customerId);
+                throw;
+            }
+        }
+
+        public async Task<OrderDto> UpdateStatusAsync(int id, OrderStatus status)
+        {
+            try
+            {
+                _logger.LogInformation("Updating order status: {Id}, Status: {Status}", id, status);
+
+                var order = await _dbSet
+                    .Include(o => o.Company)
+                    .Include(o => o.Customer)
+                    .Include(o => o.OrderItems)
+                        .ThenInclude(oi => oi.Product)
+                    .FirstOrDefaultAsync(o => o.Id == id && !o.IsDeleted);
+
+                if (order == null)
+                {
+                    throw new ApiException("Order not found", 404, "ORDER_NOT_FOUND");
+                }
+
+                order.Status = status.ToString();
+                order.UpdatedAt = DateTime.UtcNow;
+
+                _dbSet.Update(order);
+                await _context.SaveChangesAsync();
+
+                return _mapper.Map<OrderDto>(order);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating order status: {Id}", id);
+                throw;
+            }
+        }
+
+        public async Task<OrderDto> AddOrderItemAsync(int orderId, CreateOrderItemDto orderItemDto)
+        {
+            try
+            {
+                _logger.LogInformation("Adding item to order: {OrderId}", orderId);
+
+                var order = await _dbSet
+                    .Include(o => o.OrderItems)
+                    .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
+
+                if (order == null)
+                {
+                    throw new ApiException("Order not found", 404, "ORDER_NOT_FOUND");
+                }
+
+                var product = await _context.Products
+                    .FirstOrDefaultAsync(p => p.Id == orderItemDto.ProductId && !p.IsDeleted);
+
+                if (product == null)
+                {
+                    throw new ApiException("Product not found", 404, "PRODUCT_NOT_FOUND");
+                }
+
                 var orderItem = new OrderItem
                 {
-                    OrderId = order.Id,
-                    ProductId = item.ProductId,
-                    Quantity = item.Quantity,
-                    UnitPrice = item.UnitPrice,
-                    TotalPrice = item.Quantity * item.UnitPrice
+                    OrderId = orderId,
+                    ProductId = orderItemDto.ProductId,
+                    Quantity = (int)orderItemDto.Quantity,
+                    UnitPrice = orderItemDto.UnitPrice,
+                    Total = orderItemDto.Quantity * orderItemDto.UnitPrice,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = orderItemDto.CreatedBy
                 };
 
                 _context.OrderItems.Add(orderItem);
+                await _context.SaveChangesAsync();
+
+                // Recalculate order totals
+                await RecalculateOrderTotalsAsync(order);
+
+                return await GetByIdAsync(orderId);
             }
-
-            await _context.SaveChangesAsync();
-
-            // Calculate total amount
-            order.TotalAmount = await _context.OrderItems
-                .Where(oi => oi.OrderId == order.Id)
-                .SumAsync(oi => oi.TotalPrice);
-
-            await _context.SaveChangesAsync();
-
-            return await GetOrderAsync(order.Id);
-        }
-
-        public async Task<OrderDto?> GetOrderAsync(int id)
-        {
-            var order = await _context.Orders
-                .Include(o => o.Customer)
-                .Include(o => o.Company)
-                .Include(o => o.OrderItems)
-                    .ThenInclude(oi => oi.Product)
-                .FirstOrDefaultAsync(o => o.Id == id);
-
-            if (order == null) return null;
-
-            return new OrderDto
+            catch (Exception ex)
             {
-                Id = order.Id,
-                OrderNumber = order.OrderNumber,
-                CustomerId = order.CustomerId,
-                CustomerName = order.Customer?.Name ?? string.Empty,
-                CompanyId = order.CompanyId,
-                CompanyName = order.Company?.Name ?? string.Empty,
-                TotalAmount = order.TotalAmount,
-                Status = order.Status,
-                OrderDate = order.OrderDate,
-                CreatedDate = order.CreatedDate,
-                OrderItems = order.OrderItems.Select(oi => new OrderItemDto
-                {
-                    Id = oi.Id,
-                    OrderId = oi.OrderId,
-                    ProductId = oi.ProductId,
-                    ProductName = oi.Product?.Name ?? string.Empty,
-                    Quantity = oi.Quantity,
-                    UnitPrice = oi.UnitPrice,
-                    TotalPrice = oi.TotalPrice
-                }).ToList()
-            };
-        }
-
-        public async Task<IEnumerable<OrderDto>> GetOrdersAsync()
-        {
-            var orders = await _context.Orders
-                .Include(o => o.Customer)
-                .Include(o => o.Company)
-                .Include(o => o.OrderItems)
-                    .ThenInclude(oi => oi.Product)
-                .ToListAsync();
-
-            return orders.Select(o => new OrderDto
-            {
-                Id = o.Id,
-                OrderNumber = o.OrderNumber,
-                CustomerId = o.CustomerId,
-                CustomerName = o.Customer?.Name ?? string.Empty,
-                CompanyId = o.CompanyId,
-                CompanyName = o.Company?.Name ?? string.Empty,
-                TotalAmount = o.TotalAmount,
-                Status = o.Status,
-                OrderDate = o.OrderDate,
-                CreatedDate = o.CreatedDate,
-                OrderItems = o.OrderItems.Select(oi => new OrderItemDto
-                {
-                    Id = oi.Id,
-                    OrderId = oi.OrderId,
-                    ProductId = oi.ProductId,
-                    ProductName = oi.Product?.Name ?? string.Empty,
-                    Quantity = oi.Quantity,
-                    UnitPrice = oi.UnitPrice,
-                    TotalPrice = oi.TotalPrice
-                }).ToList()
-            });
-        }
-
-        public async Task<OrderDto?> UpdateOrderAsync(int id, UpdateOrderDto updateOrderDto)
-        {
-            var order = await _context.Orders
-                .Include(o => o.OrderItems)
-                .FirstOrDefaultAsync(o => o.Id == id);
-
-            if (order == null) return null;
-
-            order.CustomerId = updateOrderDto.CustomerId;
-            order.CompanyId = updateOrderDto.CompanyId;
-            order.Status = updateOrderDto.Status;
-
-            // Update order items
-            _context.OrderItems.RemoveRange(order.OrderItems);
-
-            foreach (var item in updateOrderDto.OrderItems)
-            {
-                var orderItem = new OrderItem
-                {
-                    OrderId = order.Id,
-                    ProductId = item.ProductId,
-                    Quantity = item.Quantity,
-                    UnitPrice = item.UnitPrice,
-                    TotalPrice = item.Quantity * item.UnitPrice
-                };
-
-                _context.OrderItems.Add(orderItem);
+                _logger.LogError(ex, "Error adding item to order: {OrderId}", orderId);
+                throw;
             }
-
-            // Recalculate total amount
-            order.TotalAmount = updateOrderDto.OrderItems.Sum(item => item.Quantity * item.UnitPrice);
-
-            await _context.SaveChangesAsync();
-
-            return await GetOrderAsync(order.Id);
         }
 
-        public async Task<bool> DeleteOrderAsync(int id)
+        public async Task<OrderDto> RemoveOrderItemAsync(int orderId, int itemId)
         {
-            var order = await _context.Orders
-                .Include(o => o.OrderItems)
-                .FirstOrDefaultAsync(o => o.Id == id);
+            try
+            {
+                _logger.LogInformation("Removing item from order: {OrderId}, ItemId: {ItemId}", orderId, itemId);
 
-            if (order == null) return false;
+                var order = await _dbSet
+                    .Include(o => o.OrderItems)
+                    .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
-            _context.OrderItems.RemoveRange(order.OrderItems);
-            _context.Orders.Remove(order);
-            await _context.SaveChangesAsync();
-            return true;
+                if (order == null)
+                {
+                    throw new ApiException("Order not found", 404, "ORDER_NOT_FOUND");
+                }
+
+                var orderItem = await _context.OrderItems
+                    .FirstOrDefaultAsync(oi => oi.Id == itemId && oi.OrderId == orderId);
+
+                if (orderItem == null)
+                {
+                    throw new ApiException("Order item not found", 404, "ORDER_ITEM_NOT_FOUND");
+                }
+
+                _context.OrderItems.Remove(orderItem);
+                await _context.SaveChangesAsync();
+
+                // Recalculate order totals
+                await RecalculateOrderTotalsAsync(order);
+
+                return await GetByIdAsync(orderId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error removing item from order: {OrderId}, ItemId: {ItemId}", orderId, itemId);
+                throw;
+            }
         }
 
-        private string GenerateOrderNumber()
+        public async Task<OrderDto> UpdateOrderItemQuantityAsync(int orderId, int itemId, int quantity)
         {
-            return $"ORD-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString().Substring(0, 8)}";
+            try
+            {
+                _logger.LogInformation("Updating item quantity: {OrderId}, ItemId: {ItemId}, Quantity: {Quantity}", orderId, itemId, quantity);
+
+                var order = await _dbSet
+                    .Include(o => o.OrderItems)
+                    .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
+
+                if (order == null)
+                {
+                    throw new ApiException("Order not found", 404, "ORDER_NOT_FOUND");
+                }
+
+                var orderItem = await _context.OrderItems
+                    .FirstOrDefaultAsync(oi => oi.Id == itemId && oi.OrderId == orderId);
+
+                if (orderItem == null)
+                {
+                    throw new ApiException("Order item not found", 404, "ORDER_ITEM_NOT_FOUND");
+                }
+
+                orderItem.Quantity = quantity;
+                orderItem.Total = quantity * orderItem.UnitPrice;
+                orderItem.UpdatedAt = DateTime.UtcNow;
+
+                _context.OrderItems.Update(orderItem);
+                await _context.SaveChangesAsync();
+
+                // Recalculate order totals
+                await RecalculateOrderTotalsAsync(order);
+
+                return await GetByIdAsync(orderId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating item quantity: {OrderId}, ItemId: {ItemId}", orderId, itemId);
+                throw;
+            }
+        }
+
+        private async Task RecalculateOrderTotalsAsync(Order order)
+        {
+            await _context.Entry(order)
+                .Collection(o => o.OrderItems)
+                .LoadAsync();
+
+            order.SubTotal = order.OrderItems.Sum(oi => oi.Total);
+            order.Total = order.SubTotal + order.TaxAmount;
+            order.UpdatedAt = DateTime.UtcNow;
+
+            _dbSet.Update(order);
+            await _context.SaveChangesAsync();
         }
     }
 } 

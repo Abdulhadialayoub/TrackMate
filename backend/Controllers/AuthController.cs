@@ -1,92 +1,99 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Threading.Tasks;
 using TrackMate.API.Models.DTOs;
 using TrackMate.API.Services;
 using TrackMate.API.Interfaces;
+using TrackMate.API.Exceptions;
+using Microsoft.Extensions.Logging;
 
 namespace TrackMate.API.Controllers
 {
     [ApiController]
+    [Authorize]
     [Route("api/[controller]")]
-    public class AuthController : ControllerBase
+    public class AuthController : BaseController
     {
         private readonly IAuthService _authService;
+        private readonly ILogger<AuthController> _logger;
 
-        public AuthController(IAuthService authService)
+        public AuthController(
+            IAuthService authService,
+            ILogger<AuthController> logger)
         {
             _authService = authService;
+            _logger = logger;
         }
 
+        [AllowAnonymous]
         [HttpPost("login")]
-        public async Task<ActionResult<LoginResponseDto>> Login([FromBody] LoginDto loginDto)
+        public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginDto loginDto)
         {
-            try
+            if (!ModelState.IsValid)
             {
-                var result = await _authService.LoginAsync(loginDto);
-                return Ok(result);
+                return BadRequest(ModelState);
             }
-            catch (UnauthorizedAccessException ex)
-            {
-                return Unauthorized(new { message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
+
+            return await ExecuteAsync(async () => await _authService.LoginAsync(loginDto));
         }
 
+        [AllowAnonymous]
         [HttpPost("register")]
-        public async Task<ActionResult<RegisterResponseDto>> Register([FromBody] RegisterDto registerDto)
+        public async Task<ActionResult<AuthResponseDto>> Register([FromBody] RegisterDto registerDto)
         {
-            try
+            if (!ModelState.IsValid)
             {
-                var result = await _authService.RegisterAsync(registerDto);
-                return Ok(result);
+                return BadRequest(ModelState);
             }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
+
+            return await ExecuteCreateAsync(
+                async () => await _authService.RegisterAsync(registerDto),
+                nameof(Login),
+                new { email = registerDto.Email }
+            );
         }
 
+        [AllowAnonymous]
         [HttpPost("refresh-token")]
-        public async Task<ActionResult<LoginResponseDto>> RefreshToken([FromBody] string refreshToken)
+        public async Task<ActionResult<AuthResponseDto>> RefreshToken([FromBody] RefreshTokenDto refreshTokenDto)
         {
-            try
+            if (!ModelState.IsValid)
             {
-                var result = await _authService.RefreshTokenAsync(refreshToken);
-                return Ok(result);
+                return BadRequest(ModelState);
             }
-            catch (UnauthorizedAccessException ex)
-            {
-                return Unauthorized(new { message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
+
+            return await ExecuteAsync(async () => await _authService.RefreshTokenAsync(refreshTokenDto));
         }
 
         [Authorize]
         [HttpPost("revoke-token")]
-        public async Task<IActionResult> RevokeToken([FromBody] string refreshToken)
+        public async Task<IActionResult> RevokeToken([FromBody] RefreshTokenDto refreshTokenDto)
         {
-            try
+            if (!ModelState.IsValid)
             {
-                var result = await _authService.RevokeTokenAsync(refreshToken);
-                if (!result)
-                    return NotFound(new { message = "Token not found" });
+                return BadRequest(ModelState);
+            }
 
-                return Ok(new { message = "Token revoked" });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
+            bool result = await _authService.RevokeTokenAsync(refreshTokenDto.RefreshToken);
+            return Ok(result);
+        }
+
+        [Authorize]
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout()
+        {
+            // Perform logout operation
+            await _authService.LogoutAsync();
+            return Ok();
+        }
+
+        [Authorize]
+        [HttpGet("validate-token")]
+        public async Task<ActionResult<bool>> ValidateToken()
+        {
+            var token = Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
+            bool result = await _authService.ValidateTokenAsync(token);
+            return Ok(result);
         }
     }
 } 

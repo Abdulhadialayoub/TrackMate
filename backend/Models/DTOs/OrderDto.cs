@@ -1,58 +1,103 @@
+using TrackMate.API.Models.Entities;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using TrackMate.API.Models.Enums;
+
 namespace TrackMate.API.Models.DTOs
 {
-    public class OrderDto
+    public class OrderDto : BaseDto
     {
-        public int Id { get; set; }
-        public string OrderNumber { get; set; } = string.Empty;
-        public int CustomerId { get; set; }
-        public string CustomerName { get; set; } = string.Empty;
-        public int CompanyId { get; set; }
-        public string CompanyName { get; set; } = string.Empty;
-        public decimal TotalAmount { get; set; }
-        public string Status { get; set; } = string.Empty;
-        public DateTime OrderDate { get; set; }
-        public DateTime CreatedDate { get; set; }
-        public List<OrderItemDto> OrderItems { get; set; } = new();
-    }
+        [Required]
+        public new int CompanyId { get; set; }
 
-    public class OrderItemDto
-    {
-        public int Id { get; set; }
-        public int OrderId { get; set; }
-        public int ProductId { get; set; }
-        public string ProductName { get; set; } = string.Empty;
-        public int Quantity { get; set; }
-        public decimal UnitPrice { get; set; }
-        public decimal TotalPrice { get; set; }
+        [Required]
+        public int CustomerId { get; set; }
+
+        [Required]
+        [StringLength(50)]
+        public string OrderNumber { get; set; }
+
+        [Required]
+        public DateTime OrderDate { get; set; }
+
+        [Required]
+        public DateTime DueDate { get; set; }
+
+        [Required]
+        public decimal SubTotal { get; set; }
+
+        [Required]
+        public decimal TaxAmount { get; set; }
+
+        [Required]
+        public decimal TotalAmount { get; set; }
+
+        [Required]
+        public OrderStatus Status { get; set; }
+
+        public string Notes { get; set; }
+
+        public IEnumerable<OrderItemDto> Items { get; set; }
+
+        public CustomerDto Customer { get; set; }
     }
 
     public class CreateOrderDto
     {
-        public int CustomerId { get; set; }
+        [Required]
         public int CompanyId { get; set; }
-        public List<CreateOrderItemDto> OrderItems { get; set; } = new();
-    }
 
-    public class CreateOrderItemDto
-    {
-        public int ProductId { get; set; }
-        public int Quantity { get; set; }
-        public decimal UnitPrice { get; set; }
+        [Required]
+        public int CustomerId { get; set; }
+
+        [Required]
+        public DateTime OrderDate { get; set; }
+
+        [Required]
+        public DateTime DueDate { get; set; }
+
+        public decimal TaxRate { get; set; } = 0;
+        
+        public decimal ShippingCost { get; set; } = 0;
+        
+        public string Currency { get; set; } = "USD";
+        
+        public string Status { get; set; } = "Draft";
+
+        public string Notes { get; set; }
+        
+        public string CreatedBy { get; set; } = string.Empty;
+
+        public IEnumerable<CreateOrderItemDto> Items { get; set; }
     }
 
     public class UpdateOrderDto
     {
-        public int CustomerId { get; set; }
-        public int CompanyId { get; set; }
-        public string Status { get; set; } = string.Empty;
-        public List<UpdateOrderItemDto> OrderItems { get; set; } = new();
-    }
+        [Required]
+        public DateTime OrderDate { get; set; }
+        
+        [Required]
+        public DateTime DueDate { get; set; }
+        
+        public decimal TaxRate { get; set; }
+        
+        public decimal ShippingCost { get; set; }
+        
+        public string Currency { get; set; }
+        
+        public OrderStatus Status { get; set; }
 
-    public class UpdateOrderItemDto
+        public string Notes { get; set; }
+        
+        public string UpdatedBy { get; set; } = string.Empty;
+
+        public IEnumerable<UpdateOrderItemDto> Items { get; set; }
+    }
+    
+    public class UpdateOrderStatusDto
     {
-        public int Id { get; set; }
-        public int ProductId { get; set; }
-        public int Quantity { get; set; }
-        public decimal UnitPrice { get; set; }
+        [Required]
+        public OrderStatus Status { get; set; }
     }
 } 

@@ -1,164 +1,247 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using TrackMate.API.Models.DTOs;
-using TrackMate.API.Services;
 using TrackMate.API.Interfaces;
+using TrackMate.API.Exceptions;
+using Microsoft.Extensions.Logging;
+using TrackMate.API.Services;
+using TrackMate.API.Models.Enums;
 
 namespace TrackMate.API.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
     public class CompanyController : BaseController
     {
         private readonly ICompanyService _companyService;
+        private readonly ILogger<CompanyController> _logger;
 
-        public CompanyController(ICompanyService companyService)
+        public CompanyController(
+            ICompanyService companyService,
+            ILogger<CompanyController> logger)
         {
             _companyService = companyService;
-        }
-
-        [HttpPost]
-        [Authorize(Roles = "Admin,Dev")]
-        public async Task<ActionResult<CompanyDto>> CreateCompany([FromBody] CreateCompanyDto createCompanyDto)
-        {
-            try
-            {
-                var company = await _companyService.CreateCompanyAsync(createCompanyDto);
-                return CreatedAtAction(nameof(GetCompany), new { id = company.Id }, company);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = ex.Message });
-            }
+            _logger = logger;
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<CompanyDto>>> GetCompanies()
+        public async Task<ActionResult<IEnumerable<CompanyDto>>> GetAll()
         {
             try
             {
-                var userRole = GetCurrentUserRole();
-                var userCompanyId = GetCurrentUserCompanyId();
-
-                var companies = await _companyService.GetCompaniesAsync();
+                // Dev rolü kontrolü
+                var userRole = GetUserRole();
+                _logger.LogInformation($"User with role {userRole} requested all companies");
                 
-                // Dev rolü tüm şirketleri görebilir
-                if (userRole == "Dev")
+                // Sadece Dev rolü için izin kontrolünü atlama
+                if (userRole != "Dev")
                 {
-                    return Ok(companies);
+                    try
+                    {
+                        // Check permission
+                        RequirePermission(Permissions.ViewCompanies);
+                        _logger.LogInformation($"Permission check passed for user with role {userRole}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, $"Permission check failed for user with role {userRole}");
+                        return StatusCode(403, new { message = "You don't have permission to view companies", error = ex.Message });
+                    }
                 }
-
-                // Admin ve User sadece kendi şirketlerini görebilir
-                var filteredCompanies = companies.Where(c => c.Id == userCompanyId);
-                return Ok(filteredCompanies);
+                
+                var companies = await _companyService.GetAllAsync();
+                _logger.LogInformation($"Returning {companies.Count()} companies");
+                return Ok(companies);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = ex.Message });
+                _logger.LogError(ex, "Error in GetAll companies");
+                return StatusCode(500, new { message = "An error occurred while retrieving companies", error = ex.Message });
             }
         }
 
         [HttpGet("{id}")]
-        public async Task<ActionResult<CompanyDto>> GetCompany(int id)
+        public async Task<ActionResult<CompanyDto>> GetById(int id)
         {
-            try
+            // Check permission
+            RequirePermission(Permissions.ViewCompanies);
+            
+            return await ExecuteAsync(async () => await _companyService.GetByIdAsync(id));
+        }
+
+        [HttpPost]
+        public async Task<ActionResult<CompanyDto>> Create([FromBody] CreateCompanyDto createCompanyDto)
+        {
+            // Check permission
+            RequirePermission(Permissions.CreateCompany);
+            
+            if (!ModelState.IsValid)
             {
-                var userRole = GetCurrentUserRole();
-                var userCompanyId = GetCurrentUserCompanyId();
-
-                // Dev rolü herhangi bir şirketi görüntüleyebilir
-                if (userRole != "Dev" && userCompanyId != id)
-                {
-                    return Forbid();
-                }
-
-                var company = await _companyService.GetCompanyAsync(id);
-                if (company == null)
-                {
-                    return NotFound($"Company with ID {id} not found.");
-                }
-
-                if (!IsAuthorizedForCompany(company.Id))
-                {
-                    return Forbid();
-                }
-
-                return Ok(company);
+                return BadRequest(ModelState);
             }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = ex.Message });
-            }
+
+            var createdCompany = await _companyService.CreateAsync(createCompanyDto);
+            
+            return await ExecuteCreateAsync(
+                async () => createdCompany,
+                nameof(GetById),
+                new { id = createdCompany.Id }
+            );
         }
 
         [HttpPut("{id}")]
-        [Authorize(Roles = "Admin,Dev")]
-        public async Task<ActionResult<CompanyDto>> UpdateCompany(int id, [FromBody] UpdateCompanyDto updateCompanyDto)
+        public async Task<ActionResult<CompanyDto>> Update(int id, [FromBody] UpdateCompanyDto updateCompanyDto)
         {
-            try
+            // Check permission
+            RequirePermission(Permissions.UpdateCompany);
+            
+            if (!ModelState.IsValid)
             {
-                var userRole = GetCurrentUserRole();
-                var userCompanyId = GetCurrentUserCompanyId();
-
-                // Dev rolü herhangi bir şirketi güncelleyebilir
-                if (userRole != "Dev" && userCompanyId != id)
-                {
-                    return Forbid();
-                }
-
-                if (!IsAuthorizedForCompany(id))
-                {
-                    return Forbid();
-                }
-
-                var company = await _companyService.UpdateCompanyAsync(id, updateCompanyDto);
-                if (company == null)
-                {
-                    return NotFound($"Company with ID {id} not found.");
-                }
-
-                return Ok(company);
+                return BadRequest(ModelState);
             }
-            catch (Exception ex)
+
+            var company = await _companyService.GetByIdAsync(id);
+            if (company == null)
             {
-                return StatusCode(500, new { message = ex.Message });
+                return NotFound(new { message = "Company not found", code = "COMPANY_NOT_FOUND" });
             }
+
+            return await ExecuteWithValidationAsync(
+                company.Id,
+                async () => await _companyService.UpdateAsync(id, updateCompanyDto)
+            );
+        }
+
+        [HttpPut("{id}/profile")]
+        public async Task<ActionResult<CompanyDto>> UpdateProfile(int id, [FromBody] UpdateCompanyDto updateCompanyDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var company = await _companyService.GetByIdAsync(id);
+            if (company == null)
+            {
+                return NotFound(new { message = "Company not found", code = "COMPANY_NOT_FOUND" });
+            }
+
+            return await ExecuteWithValidationAsync(
+                company.Id,
+                async () => await _companyService.UpdateCompanyProfileAsync(id, updateCompanyDto)
+            );
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Dev")]
-        public async Task<ActionResult> DeleteCompany(int id)
+        public async Task<IActionResult> Delete(int id)
         {
-            try
+            var company = await _companyService.GetByIdAsync(id);
+            if (company == null)
             {
-                var userRole = GetCurrentUserRole();
-                var userCompanyId = GetCurrentUserCompanyId();
-
-                // Dev rolü herhangi bir şirketi silmeye yetkili
-                if (userRole != "Dev" && userCompanyId != id)
-                {
-                    return Forbid();
-                }
-
-                if (!IsAuthorizedForCompany(id))
-                {
-                    return Forbid();
-                }
-
-                var result = await _companyService.DeleteCompanyAsync(id);
-                if (!result)
-                {
-                    return NotFound($"Company with ID {id} not found.");
-                }
-
-                return NoContent();
+                return NotFound(new { message = "Company not found", code = "COMPANY_NOT_FOUND" });
             }
-            catch (Exception ex)
+
+            return await ExecuteWithValidationAsync(
+                company.Id,
+                async () => await _companyService.DeleteAsync(id)
+            );
+        }
+
+        [HttpPut("{id}/status")]
+        public async Task<ActionResult<CompanyDto>> UpdateStatus(int id, [FromBody] UpdateCompanyStatusDto statusDto)
+        {
+            if (!ModelState.IsValid)
             {
-                return StatusCode(500, new { message = ex.Message });
+                return BadRequest(ModelState);
             }
+
+            var company = await _companyService.GetByIdAsync(id);
+            if (company == null)
+            {
+                return NotFound(new { message = "Company not found", code = "COMPANY_NOT_FOUND" });
+            }
+
+            // Convert IsActive boolean to status string
+            string status = statusDto.IsActive ? "Active" : "Inactive";
+
+            return await ExecuteWithValidationAsync(
+                company.Id,
+                async () => await _companyService.UpdateStatusAsync(id, status)
+            );
+        }
+
+        [HttpGet("{id}/bank-details")]
+        public async Task<ActionResult<IEnumerable<CompanyBankDetailDto>>> GetBankDetails(int id)
+        {
+            var company = await _companyService.GetByIdAsync(id);
+            if (company == null)
+            {
+                return NotFound(new { message = "Company not found", code = "COMPANY_NOT_FOUND" });
+            }
+
+            return await ExecuteWithValidationAsync(
+                company.Id,
+                async () => await _companyService.GetBankDetailsAsync(id)
+            );
+        }
+
+        [HttpPost("{id}/bank-details")]
+        public async Task<ActionResult<CompanyBankDetailDto>> AddBankDetail(int id, [FromBody] CreateCompanyBankDetailDto bankDetailDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var company = await _companyService.GetByIdAsync(id);
+            if (company == null)
+            {
+                return NotFound(new { message = "Company not found", code = "COMPANY_NOT_FOUND" });
+            }
+
+            return await ExecuteWithValidationAsync(
+                company.Id,
+                async () => await _companyService.AddBankDetailAsync(id, bankDetailDto)
+            );
+        }
+
+        [HttpPut("{id}/bank-details/{bankDetailId}")]
+        public async Task<ActionResult<CompanyBankDetailDto>> UpdateBankDetail(int id, int bankDetailId, [FromBody] UpdateCompanyBankDetailDto bankDetailDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var company = await _companyService.GetByIdAsync(id);
+            if (company == null)
+            {
+                return NotFound(new { message = "Company not found", code = "COMPANY_NOT_FOUND" });
+            }
+
+            return await ExecuteWithValidationAsync(
+                company.Id,
+                async () => await _companyService.UpdateBankDetailAsync(id, bankDetailId, bankDetailDto)
+            );
+        }
+
+        [HttpDelete("{id}/bank-details/{bankDetailId}")]
+        public async Task<IActionResult> DeleteBankDetail(int id, int bankDetailId)
+        {
+            var company = await _companyService.GetByIdAsync(id);
+            if (company == null)
+            {
+                return NotFound(new { message = "Company not found", code = "COMPANY_NOT_FOUND" });
+            }
+
+            return await ExecuteWithValidationAsync(
+                company.Id,
+                async () => await _companyService.DeleteBankDetailAsync(id, bankDetailId)
+            );
         }
     }
 } 

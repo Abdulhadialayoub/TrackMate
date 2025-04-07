@@ -1,208 +1,250 @@
 using Microsoft.EntityFrameworkCore;
 using TrackMate.API.Data;
+using TrackMate.API.Exceptions;
+using TrackMate.API.Interfaces;
 using TrackMate.API.Models.DTOs;
 using TrackMate.API.Models.Entities;
-using TrackMate.API.Interfaces;
+using TrackMate.API.Models.Enums;
+using AutoMapper;
 
 namespace TrackMate.API.Services
 {
-    public class InvoiceService : IInvoiceService
+    public class InvoiceService : BaseService<Invoice, InvoiceDto, CreateInvoiceDto, UpdateInvoiceDto>, IInvoiceService
     {
-        private readonly TrackMateDbContext _context;
+        private readonly IPdfService _pdfService;
 
-        public InvoiceService(TrackMateDbContext context)
+        public InvoiceService(TrackMateDbContext context, IMapper mapper, ILogger<InvoiceService> logger, IPdfService pdfService)
+            : base(context, mapper, logger)
         {
-            _context = context;
+            _pdfService = pdfService;
         }
 
-        public async Task<InvoiceDto> CreateInvoiceAsync(CreateInvoiceDto createInvoiceDto)
+        protected override async Task<Invoice> GetEntityByIdAsync(int id)
         {
-            var order = await _context.Orders
-                .Include(o => o.Customer)
-                .Include(o => o.Company)
-                .Include(o => o.OrderItems)
-                    .ThenInclude(oi => oi.Product)
-                .FirstOrDefaultAsync(o => o.Id == createInvoiceDto.OrderId);
-
-            if (order == null)
-                throw new ArgumentException("Order not found");
-
-            var invoice = new Invoice
-            {
-                InvoiceNumber = GenerateInvoiceNumber(),
-                OrderId = createInvoiceDto.OrderId,
-                CustomerId = createInvoiceDto.CustomerId,
-                CompanyId = createInvoiceDto.CompanyId,
-                Status = "Pending",
-                InvoiceDate = DateTime.UtcNow,
-                DueDate = createInvoiceDto.DueDate,
-                CreatedDate = DateTime.UtcNow
-            };
-
-            _context.Invoices.Add(invoice);
-            await _context.SaveChangesAsync();
-
-            // Add invoice items from order items
-            foreach (var orderItem in order.OrderItems)
-            {
-                var invoiceItem = new InvoiceItem
-                {
-                    InvoiceId = invoice.Id,
-                    ProductId = orderItem.ProductId,
-                    Quantity = orderItem.Quantity,
-                    UnitPrice = orderItem.UnitPrice,
-                    TotalPrice = orderItem.TotalPrice
-                };
-
-                _context.InvoiceItems.Add(invoiceItem);
-            }
-
-            await _context.SaveChangesAsync();
-
-            // Calculate total amount
-            invoice.TotalAmount = await _context.InvoiceItems
-                .Where(ii => ii.InvoiceId == invoice.Id)
-                .SumAsync(ii => ii.TotalPrice);
-
-            await _context.SaveChangesAsync();
-
-            return await GetInvoiceAsync(invoice.Id);
-        }
-
-        public async Task<InvoiceDto?> GetInvoiceAsync(int id)
-        {
-            var invoice = await _context.Invoices
-                .Include(i => i.Order)
-                .Include(i => i.Customer)
+            return await _dbSet
                 .Include(i => i.Company)
+                .Include(i => i.Customer)
+                .Include(i => i.Order)
+                .Include(i => i.Bank)
                 .Include(i => i.InvoiceItems)
                     .ThenInclude(ii => ii.Product)
-                .FirstOrDefaultAsync(i => i.Id == id);
-
-            if (invoice == null) return null;
-
-            return new InvoiceDto
-            {
-                Id = invoice.Id,
-                InvoiceNumber = invoice.InvoiceNumber,
-                OrderId = invoice.OrderId,
-                OrderNumber = invoice.Order?.OrderNumber ?? string.Empty,
-                CustomerId = invoice.CustomerId,
-                CustomerName = invoice.Customer?.Name ?? string.Empty,
-                CompanyId = invoice.CompanyId,
-                CompanyName = invoice.Company?.Name ?? string.Empty,
-                TotalAmount = invoice.TotalAmount,
-                Status = invoice.Status,
-                InvoiceDate = invoice.InvoiceDate,
-                DueDate = invoice.DueDate,
-                CreatedDate = invoice.CreatedDate,
-                InvoiceItems = invoice.InvoiceItems.Select(ii => new InvoiceItemDto
-                {
-                    Id = ii.Id,
-                    InvoiceId = ii.InvoiceId,
-                    ProductId = ii.ProductId,
-                    ProductName = ii.Product?.Name ?? string.Empty,
-                    Quantity = ii.Quantity,
-                    UnitPrice = ii.UnitPrice,
-                    TotalPrice = ii.TotalPrice
-                }).ToList()
-            };
+                .FirstOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
         }
 
         public async Task<IEnumerable<InvoiceDto>> GetInvoicesAsync()
         {
-            var invoices = await _context.Invoices
-                .Include(i => i.Order)
-                .Include(i => i.Customer)
+            return await GetAllAsync();
+        }
+
+        public async Task<InvoiceDto> GetInvoiceByIdAsync(int id)
+        {
+            return await GetByIdAsync(id);
+        }
+
+        public async Task<IEnumerable<InvoiceDto>> GetInvoicesByCompanyIdAsync(int companyId)
+        {
+            return await GetByCompanyIdAsync(companyId);
+        }
+
+        public async Task<IEnumerable<InvoiceDto>> GetByCustomerIdAsync(int customerId)
+        {
+            var invoices = await _dbSet
                 .Include(i => i.Company)
+                .Include(i => i.Customer)
+                .Include(i => i.Order)
+                .Include(i => i.Bank)
                 .Include(i => i.InvoiceItems)
                     .ThenInclude(ii => ii.Product)
+                .Where(i => i.CustomerId == customerId && !i.IsDeleted)
                 .ToListAsync();
 
-            return invoices.Select(i => new InvoiceDto
-            {
-                Id = i.Id,
-                InvoiceNumber = i.InvoiceNumber,
-                OrderId = i.OrderId,
-                OrderNumber = i.Order?.OrderNumber ?? string.Empty,
-                CustomerId = i.CustomerId,
-                CustomerName = i.Customer?.Name ?? string.Empty,
-                CompanyId = i.CompanyId,
-                CompanyName = i.Company?.Name ?? string.Empty,
-                TotalAmount = i.TotalAmount,
-                Status = i.Status,
-                InvoiceDate = i.InvoiceDate,
-                DueDate = i.DueDate,
-                CreatedDate = i.CreatedDate,
-                InvoiceItems = i.InvoiceItems.Select(ii => new InvoiceItemDto
-                {
-                    Id = ii.Id,
-                    InvoiceId = ii.InvoiceId,
-                    ProductId = ii.ProductId,
-                    ProductName = ii.Product?.Name ?? string.Empty,
-                    Quantity = ii.Quantity,
-                    UnitPrice = ii.UnitPrice,
-                    TotalPrice = ii.TotalPrice
-                }).ToList()
-            });
+            return _mapper.Map<IEnumerable<InvoiceDto>>(invoices);
         }
 
-        public async Task<InvoiceDto?> UpdateInvoiceAsync(int id, UpdateInvoiceDto updateInvoiceDto)
+        public async Task<InvoiceDto> GetByOrderIdAsync(int orderId)
         {
-            var invoice = await _context.Invoices
+            var invoice = await _dbSet
+                .Include(i => i.Company)
+                .Include(i => i.Customer)
+                .Include(i => i.Order)
+                .Include(i => i.Bank)
                 .Include(i => i.InvoiceItems)
-                .FirstOrDefaultAsync(i => i.Id == id);
+                    .ThenInclude(ii => ii.Product)
+                .FirstOrDefaultAsync(i => i.OrderId == orderId && !i.IsDeleted);
 
-            if (invoice == null) return null;
+            if (invoice == null)
+                return null;
 
-            invoice.OrderId = updateInvoiceDto.OrderId;
-            invoice.CustomerId = updateInvoiceDto.CustomerId;
-            invoice.CompanyId = updateInvoiceDto.CompanyId;
-            invoice.Status = updateInvoiceDto.Status;
-            invoice.DueDate = updateInvoiceDto.DueDate;
+            return _mapper.Map<InvoiceDto>(invoice);
+        }
 
-            // Update invoice items
-            _context.InvoiceItems.RemoveRange(invoice.InvoiceItems);
+        public async Task<InvoiceDto> UpdateStatusAsync(int id, UpdateInvoiceStatusDto statusDto)
+        {
+            var invoice = await GetEntityByIdAsync(id);
+            if (invoice == null)
+                throw new ApiException("Invoice not found", 404, "INVOICE_NOT_FOUND");
 
-            foreach (var item in updateInvoiceDto.InvoiceItems)
+            invoice.Status = statusDto.Status.ToString();
+            invoice.UpdatedAt = DateTime.UtcNow;
+
+            _dbSet.Update(invoice);
+            await _context.SaveChangesAsync();
+
+            return _mapper.Map<InvoiceDto>(invoice);
+        }
+
+        public async Task<InvoiceDto> AddInvoiceItemAsync(int invoiceId, CreateInvoiceItemDto invoiceItemDto)
+        {
+            var invoice = await GetEntityByIdAsync(invoiceId);
+            if (invoice == null)
+                throw new ApiException("Invoice not found", 404, "INVOICE_NOT_FOUND");
+
+            var product = await _context.Products.FindAsync(invoiceItemDto.ProductId);
+            if (product == null)
+                throw new ApiException("Product not found", 404, "PRODUCT_NOT_FOUND");
+
+            var invoiceItem = _mapper.Map<InvoiceItem>(invoiceItemDto);
+            invoiceItem.InvoiceId = invoiceId;
+            invoiceItem.CreatedAt = DateTime.UtcNow;
+
+            _context.InvoiceItems.Add(invoiceItem);
+            await _context.SaveChangesAsync();
+
+            // Recalculate invoice totals
+            await RecalculateInvoiceTotalsAsync(invoice);
+
+            return await GetByIdAsync(invoiceId);
+        }
+
+        public async Task<InvoiceDto> RemoveInvoiceItemAsync(int invoiceId, int itemId)
+        {
+            var invoice = await GetEntityByIdAsync(invoiceId);
+            if (invoice == null)
+                throw new ApiException("Invoice not found", 404, "INVOICE_NOT_FOUND");
+
+            var invoiceItem = await _context.InvoiceItems.FindAsync(itemId);
+            if (invoiceItem == null || invoiceItem.InvoiceId != invoiceId)
+                throw new ApiException("Invoice item not found", 404, "INVOICE_ITEM_NOT_FOUND");
+
+            _context.InvoiceItems.Remove(invoiceItem);
+            await _context.SaveChangesAsync();
+
+            // Recalculate invoice totals
+            await RecalculateInvoiceTotalsAsync(invoice);
+
+            return await GetByIdAsync(invoiceId);
+        }
+
+        public async Task<InvoiceDto> CreateInvoiceAsync(CreateInvoiceDto dto)
+        {
+            // Validate company exists
+            var company = await _context.Companies.FindAsync(dto.CompanyId);
+            if (company == null)
+                throw new ApiException("Company not found", 404, "COMPANY_NOT_FOUND");
+
+            // Validate customer exists
+            var customer = await _context.Customers.FindAsync(dto.CustomerId);
+            if (customer == null)
+                throw new ApiException("Customer not found", 404, "CUSTOMER_NOT_FOUND");
+
+            // Validate order exists if provided
+            if (dto.OrderId.HasValue)
             {
-                var invoiceItem = new InvoiceItem
-                {
-                    InvoiceId = invoice.Id,
-                    ProductId = item.ProductId,
-                    Quantity = item.Quantity,
-                    UnitPrice = item.UnitPrice,
-                    TotalPrice = item.Quantity * item.UnitPrice
-                };
-
-                _context.InvoiceItems.Add(invoiceItem);
+                var order = await _context.Orders.FindAsync(dto.OrderId.Value);
+                if (order == null)
+                    throw new ApiException("Order not found", 404, "ORDER_NOT_FOUND");
             }
 
-            // Recalculate total amount
-            invoice.TotalAmount = updateInvoiceDto.InvoiceItems.Sum(item => item.Quantity * item.UnitPrice);
+            // Validate bank details exist
+            if (dto.BankDetailsId.HasValue)
+            {
+                var bankDetails = await _context.CompanyBankDetails.FindAsync(dto.BankDetailsId.Value);
+                if (bankDetails == null)
+                    throw new ApiException("Bank details not found", 404, "BANK_DETAILS_NOT_FOUND");
+            }
 
-            await _context.SaveChangesAsync();
-
-            return await GetInvoiceAsync(invoice.Id);
+            dto.InvoiceNumber = await GenerateInvoiceNumberAsync(dto.CompanyId);
+            return await CreateAsync(dto);
         }
 
-        public async Task<bool> DeleteInvoiceAsync(int id)
+        public async Task<InvoiceDto> UpdateInvoiceAsync(int id, UpdateInvoiceDto dto)
         {
-            var invoice = await _context.Invoices
-                .Include(i => i.InvoiceItems)
-                .FirstOrDefaultAsync(i => i.Id == id);
+            var existingInvoice = await GetEntityByIdAsync(id);
+            if (existingInvoice == null)
+                throw new ApiException("Invoice not found", 404, "INVOICE_NOT_FOUND");
 
-            if (invoice == null) return false;
+            // Validate order exists if provided
+            if (dto.OrderId.HasValue)
+            {
+                var order = await _context.Orders.FindAsync(dto.OrderId.Value);
+                if (order == null)
+                    throw new ApiException("Order not found", 404, "ORDER_NOT_FOUND");
+            }
 
-            _context.InvoiceItems.RemoveRange(invoice.InvoiceItems);
-            _context.Invoices.Remove(invoice);
-            await _context.SaveChangesAsync();
-            return true;
+            // Validate bank details exist
+            if (dto.BankDetailsId.HasValue)
+            {
+                var bankDetails = await _context.CompanyBankDetails.FindAsync(dto.BankDetailsId.Value);
+                if (bankDetails == null)
+                    throw new ApiException("Bank details not found", 404, "BANK_DETAILS_NOT_FOUND");
+            }
+
+            return await UpdateAsync(id, dto);
         }
 
-        private string GenerateInvoiceNumber()
+        public async Task DeleteInvoiceAsync(int id)
         {
-            return $"INV-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString().Substring(0, 8)}";
+            await DeleteAsync(id);
+        }
+
+        public async Task<string> GenerateInvoiceNumberAsync(int companyId)
+        {
+            var lastInvoice = await _dbSet
+                .Where(i => i.CompanyId == companyId)
+                .OrderByDescending(i => i.Id)
+                .FirstOrDefaultAsync();
+
+            int nextNumber = 1;
+            if (lastInvoice != null)
+            {
+                var currentNumber = int.Parse(lastInvoice.InvoiceNumber.Split('-').Last());
+                nextNumber = currentNumber + 1;
+            }
+
+            return $"INV-{companyId}-{nextNumber:D6}";
+        }
+
+        private async Task RecalculateInvoiceTotalsAsync(Invoice invoice)
+        {
+            await _context.Entry(invoice)
+                .Collection(i => i.InvoiceItems)
+                .LoadAsync();
+
+            invoice.Subtotal = invoice.InvoiceItems.Sum(item => item.Quantity * item.UnitPrice);
+            invoice.TaxAmount = invoice.InvoiceItems.Sum(item => 
+                item.Quantity * item.UnitPrice * (item.TaxRate / 100));
+            invoice.Total = invoice.Subtotal + invoice.TaxAmount;
+            invoice.UpdatedAt = DateTime.UtcNow;
+
+            _dbSet.Update(invoice);
+            await _context.SaveChangesAsync();
+        }
+
+        // Implement PDF generation methods
+        public async Task<byte[]> GenerateInvoicePdfAsync(int invoiceId)
+        {
+            return await _pdfService.GenerateInvoicePdfAsync(invoiceId);
+        }
+
+        public async Task<string> SaveInvoicePdfAsync(int invoiceId)
+        {
+            return await _pdfService.SaveInvoicePdfAsync(invoiceId);
+        }
+        
+        public async Task<InvoiceDto> SavePdfToDatabaseAsync(int invoiceId, bool saveToDatabase = true, bool saveToFileSystem = true)
+        {
+            var invoice = await _pdfService.SavePdfToDatabaseAsync(invoiceId, saveToDatabase, saveToFileSystem);
+            return _mapper.Map<InvoiceDto>(invoice);
         }
     }
 } 

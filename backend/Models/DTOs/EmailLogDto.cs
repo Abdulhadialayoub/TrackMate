@@ -1,42 +1,81 @@
+using System;
+using System.ComponentModel.DataAnnotations;
+using TrackMate.API.Models.Enums;
+
 namespace TrackMate.API.Models.DTOs
 {
-    public class EmailLogDto
+    public class EmailLogDto : BaseDto
     {
-        public int Id { get; set; }
-        public int CompanyId { get; set; }
-        public string CompanyName { get; set; } = string.Empty;
-        public int? CustomerId { get; set; }
-        public string CustomerName { get; set; } = string.Empty;
-        public string Subject { get; set; } = string.Empty;
-        public string EmailContent { get; set; } = string.Empty;
-        public string RecipientEmail { get; set; } = string.Empty;
-        public string EmailType { get; set; } = string.Empty;
-        public int? RelatedEntityId { get; set; }
-        public string RelatedEntityType { get; set; } = string.Empty;
-        public DateTime SentDate { get; set; }
-        public string Status { get; set; } = string.Empty;
-        public string ErrorMessage { get; set; } = string.Empty;
-        public int? SentBy { get; set; }
-        public string SentByUserName { get; set; } = string.Empty;
-        public DateTime CreatedDate { get; set; }
+        [Required]
+        public new int CompanyId { get; set; }
+
+        [Required]
+        [EmailAddress]
+        [StringLength(100)]
+        public string To { get; set; }
+
+        [Required]
+        [StringLength(200)]
+        public string Subject { get; set; }
+
+        [Required]
+        public string Body { get; set; }
+
+        [Required]
+        public EmailStatus Status { get; set; }
+
+        public string ErrorMessage { get; set; }
+
+        public DateTime? SentAt { get; set; }
     }
 
     public class CreateEmailLogDto
     {
+        [Required]
         public int CompanyId { get; set; }
+        
         public int? CustomerId { get; set; }
-        public string Subject { get; set; } = string.Empty;
-        public string EmailContent { get; set; } = string.Empty;
-        public string RecipientEmail { get; set; } = string.Empty;
-        public string EmailType { get; set; } = string.Empty;
+
+        [Required]
+        [EmailAddress]
+        [StringLength(100)]
+        public string To { get; set; }
+
+        [Required]
+        [StringLength(200)]
+        public string Subject { get; set; }
+
+        [Required]
+        public string Body { get; set; }
+        
+        public EmailStatus Status { get; set; } = EmailStatus.Pending;
+        
+        public string ErrorMessage { get; set; }
+        
+        public DateTime? SentAt { get; set; }
+        
+        public DateTime? SentDate { get; set; }
+        
         public int? RelatedEntityId { get; set; }
-        public string RelatedEntityType { get; set; } = string.Empty;
+        
+        public string RelatedEntityType { get; set; }
+        
         public int? SentBy { get; set; }
+        
+        public string CreatedBy { get; set; } = string.Empty;
     }
 
     public class UpdateEmailLogDto
     {
-        public string Status { get; set; } = string.Empty;
-        public string ErrorMessage { get; set; } = string.Empty;
+        [Required]
+        public EmailStatus Status { get; set; }
+
+        public string ErrorMessage { get; set; }
+
+        public DateTime? SentAt { get; set; }
+        
+        public int? CustomerId { get; set; }
+        
+        public string UpdatedBy { get; set; } = string.Empty;
     }
 } 

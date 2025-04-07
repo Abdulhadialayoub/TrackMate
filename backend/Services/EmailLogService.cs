@@ -1,127 +1,143 @@
 using Microsoft.EntityFrameworkCore;
 using TrackMate.API.Data;
+using TrackMate.API.Exceptions;
+using TrackMate.API.Interfaces;
 using TrackMate.API.Models.DTOs;
 using TrackMate.API.Models.Entities;
-using TrackMate.API.Interfaces;
+using TrackMate.API.Models.Enums;
+using AutoMapper;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace TrackMate.API.Services
 {
-    public class EmailLogService : IEmailLogService
+    public class EmailLogService : BaseService<EmailLog, EmailLogDto, CreateEmailLogDto, UpdateEmailLogDto>, IEmailLogService
     {
-        private readonly TrackMateDbContext _context;
+        private readonly new TrackMateDbContext _context;
+        private readonly new ILogger<EmailLogService> _logger;
+        private readonly new IMapper _mapper;
 
-        public EmailLogService(TrackMateDbContext context)
+        public EmailLogService(TrackMateDbContext context, IMapper mapper, ILogger<EmailLogService> logger)
+            : base(context, mapper, logger)
         {
             _context = context;
+            _logger = logger;
+            _mapper = mapper;
         }
 
-        public async Task<EmailLogDto> CreateEmailLogAsync(CreateEmailLogDto createEmailLogDto)
+        protected override async Task<EmailLog> GetEntityByIdAsync(int id)
         {
-            var emailLog = new EmailLog
-            {
-                CompanyId = createEmailLogDto.CompanyId,
-                CustomerId = createEmailLogDto.CustomerId,
-                Subject = createEmailLogDto.Subject,
-                EmailContent = createEmailLogDto.EmailContent,
-                RecipientEmail = createEmailLogDto.RecipientEmail,
-                EmailType = createEmailLogDto.EmailType,
-                RelatedEntityId = createEmailLogDto.RelatedEntityId,
-                RelatedEntityType = createEmailLogDto.RelatedEntityType,
-                SentDate = DateTime.UtcNow,
-                Status = "Pending",
-                SentBy = createEmailLogDto.SentBy,
-                CreatedDate = DateTime.UtcNow
-            };
-
-            _context.EmailLogs.Add(emailLog);
-            await _context.SaveChangesAsync();
-
-            return await GetEmailLogAsync(emailLog.Id);
-        }
-
-        public async Task<EmailLogDto?> GetEmailLogAsync(int id)
-        {
-            var emailLog = await _context.EmailLogs
-                .Include(e => e.Company)
-                .Include(e => e.Customer)
-                .Include(e => e.SentByUser)
-                .FirstOrDefaultAsync(e => e.Id == id);
-
-            if (emailLog == null) return null;
-
-            return new EmailLogDto
-            {
-                Id = emailLog.Id,
-                CompanyId = emailLog.CompanyId,
-                CompanyName = emailLog.Company?.Name ?? string.Empty,
-                CustomerId = emailLog.CustomerId,
-                CustomerName = emailLog.Customer?.Name ?? string.Empty,
-                Subject = emailLog.Subject,
-                EmailContent = emailLog.EmailContent,
-                RecipientEmail = emailLog.RecipientEmail,
-                EmailType = emailLog.EmailType,
-                RelatedEntityId = emailLog.RelatedEntityId,
-                RelatedEntityType = emailLog.RelatedEntityType,
-                SentDate = emailLog.SentDate,
-                Status = emailLog.Status,
-                ErrorMessage = emailLog.ErrorMessage,
-                SentBy = emailLog.SentBy,
-                SentByUserName = emailLog.SentByUser?.UserName ?? string.Empty,
-                CreatedDate = emailLog.CreatedDate
-            };
+            return await _dbSet
+                .Include(el => el.Company)
+                .Include(el => el.Customer)
+                .FirstOrDefaultAsync(el => el.Id == id && !el.IsDeleted);
         }
 
         public async Task<IEnumerable<EmailLogDto>> GetEmailLogsAsync()
         {
-            var emailLogs = await _context.EmailLogs
-                .Include(e => e.Company)
-                .Include(e => e.Customer)
-                .Include(e => e.SentByUser)
+            return await GetAllAsync();
+        }
+
+        public async Task<EmailLogDto> GetEmailLogByIdAsync(int id)
+        {
+            return await GetByIdAsync(id);
+        }
+
+        public async Task<IEnumerable<EmailLogDto>> GetEmailLogsByCompanyIdAsync(int companyId)
+        {
+            return await GetByCompanyIdAsync(companyId);
+        }
+
+        public async Task<EmailLogDto> CreateEmailLogAsync(CreateEmailLogDto dto)
+        {
+            // Validate company exists
+            var company = await _context.Companies.FindAsync(dto.CompanyId);
+            if (company == null)
+                throw new ApiException("Company not found", 404, "COMPANY_NOT_FOUND");
+
+            // Validate customer exists if provided
+            if (dto.CustomerId.HasValue)
+            {
+                var customer = await _context.Customers.FindAsync(dto.CustomerId.Value);
+                if (customer == null)
+                    throw new ApiException("Customer not found", 404, "CUSTOMER_NOT_FOUND");
+            }
+
+            return await CreateAsync(dto);
+        }
+
+        public async Task<EmailLogDto> UpdateEmailLogAsync(int id, UpdateEmailLogDto dto)
+        {
+            var existingEmailLog = await GetEntityByIdAsync(id);
+            if (existingEmailLog == null)
+                throw new ApiException("Email log not found", 404, "EMAIL_LOG_NOT_FOUND");
+
+            // Validate customer exists if provided
+            if (dto.CustomerId.HasValue)
+            {
+                var customer = await _context.Customers.FindAsync(dto.CustomerId.Value);
+                if (customer == null)
+                    throw new ApiException("Customer not found", 404, "CUSTOMER_NOT_FOUND");
+            }
+
+            return await UpdateAsync(id, dto);
+        }
+
+        public async Task DeleteEmailLogAsync(int id)
+        {
+            await DeleteAsync(id);
+        }
+
+        public async Task<IEnumerable<EmailLogDto>> GetEmailLogsByCustomerIdAsync(int customerId)
+        {
+            var emailLogs = await _dbSet
+                .Include(el => el.Company)
+                .Include(el => el.Customer)
+                .Where(el => el.CustomerId == customerId && !el.IsDeleted)
+                .OrderByDescending(el => el.CreatedAt)
                 .ToListAsync();
 
-            return emailLogs.Select(e => new EmailLogDto
+            return _mapper.Map<IEnumerable<EmailLogDto>>(emailLogs);
+        }
+
+        public override async Task<IEnumerable<EmailLogDto>> GetByCompanyIdAsync(int companyId)
+        {
+            try
             {
-                Id = e.Id,
-                CompanyId = e.CompanyId,
-                CompanyName = e.Company?.Name ?? string.Empty,
-                CustomerId = e.CustomerId,
-                CustomerName = e.Customer?.Name ?? string.Empty,
-                Subject = e.Subject,
-                EmailContent = e.EmailContent,
-                RecipientEmail = e.RecipientEmail,
-                EmailType = e.EmailType,
-                RelatedEntityId = e.RelatedEntityId,
-                RelatedEntityType = e.RelatedEntityType,
-                SentDate = e.SentDate,
-                Status = e.Status,
-                ErrorMessage = e.ErrorMessage,
-                SentBy = e.SentBy,
-                SentByUserName = e.SentByUser?.UserName ?? string.Empty,
-                CreatedDate = e.CreatedDate
-            });
+                _logger.LogInformation("Fetching email logs for company: {CompanyId}", companyId);
+
+                var emailLogs = await _dbSet
+                    .Include(e => e.Company)
+                    .Include(e => e.Customer)
+                    .Include(e => e.SentByUser)
+                    .Where(e => e.CompanyId == companyId && !e.IsDeleted)
+                    .OrderByDescending(e => e.SentDate)
+                    .ToListAsync();
+
+                return _mapper.Map<IEnumerable<EmailLogDto>>(emailLogs);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching email logs for company: {CompanyId}", companyId);
+                throw;
+            }
         }
 
-        public async Task<EmailLogDto?> UpdateEmailLogAsync(int id, UpdateEmailLogDto updateEmailLogDto)
+        public async Task<EmailLog> CreateEmailLogAsync(EmailLog emailLog)
         {
-            var emailLog = await _context.EmailLogs.FindAsync(id);
-            if (emailLog == null) return null;
-
-            emailLog.Status = updateEmailLogDto.Status;
-            emailLog.ErrorMessage = updateEmailLogDto.ErrorMessage;
-
+            _context.EmailLogs.Add(emailLog);
             await _context.SaveChangesAsync();
-
-            return await GetEmailLogAsync(emailLog.Id);
+            return emailLog;
         }
 
-        public async Task<bool> DeleteEmailLogAsync(int id)
+        public async Task<IEnumerable<EmailLog>> GetEmailLogsByIdAsync(int id)
         {
-            var emailLog = await _context.EmailLogs.FindAsync(id);
-            if (emailLog == null) return false;
-
-            _context.EmailLogs.Remove(emailLog);
-            await _context.SaveChangesAsync();
-            return true;
+            return await _dbSet
+                .Where(e => e.Id == id && !e.IsDeleted)
+                .ToListAsync();
         }
     }
 } 

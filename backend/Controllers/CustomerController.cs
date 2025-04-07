@@ -1,7 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using TrackMate.API.Models.DTOs;
 using TrackMate.API.Interfaces;
+using TrackMate.API.Exceptions;
+using Microsoft.Extensions.Logging;
 
 namespace TrackMate.API.Controllers
 {
@@ -11,75 +16,134 @@ namespace TrackMate.API.Controllers
     public class CustomerController : BaseController
     {
         private readonly ICustomerService _customerService;
+        private readonly ILogger<CustomerController> _logger;
 
-        public CustomerController(ICustomerService customerService)
+        public CustomerController(
+            ICustomerService customerService,
+            ILogger<CustomerController> logger)
         {
             _customerService = customerService;
-        }
-
-        [HttpPost]
-        [Authorize(Roles = "Admin,Dev")]
-        public async Task<ActionResult<CustomerDto>> CreateCustomer(CreateCustomerDto createCustomerDto)
-        {
-            var customer = await _customerService.CreateCustomerAsync(createCustomerDto);
-            return CreatedAtAction(nameof(GetCustomer), new { id = customer.Id }, customer);
-        }
-
-        [HttpGet("{id}")]
-        public async Task<ActionResult<CustomerDto>> GetCustomer(int id)
-        {
-            var customer = await _customerService.GetCustomerAsync(id);
-            if (customer == null)
-                return NotFound();
-
-            if (!IsAuthorizedForCompany(customer.CompanyId))
-                return Forbid();
-
-            return Ok(customer);
+            _logger = logger;
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<CustomerDto>>> GetCustomers()
+        public async Task<ActionResult<IEnumerable<CustomerDto>>> GetAll()
         {
-            var customers = await _customerService.GetCustomersAsync();
-            var authorizedCustomers = customers.Where(c => IsAuthorizedForCompany(c.CompanyId));
-            return Ok(authorizedCustomers);
+            return await ExecuteAsync(async () => await _customerService.GetAllAsync());
+        }
+
+        [HttpGet("{id}")]
+        public async Task<ActionResult<CustomerDto>> GetById(int id)
+        {
+            return await ExecuteAsync(async () => await _customerService.GetByIdAsync(id));
+        }
+
+        [HttpGet("company/{companyId}")]
+        public async Task<ActionResult<IEnumerable<CustomerDto>>> GetByCompanyId(int companyId)
+        {
+            return await ExecuteWithValidationAsync(companyId, async () => await _customerService.GetByCompanyIdAsync(companyId));
+        }
+
+        [HttpPost]
+        public async Task<ActionResult<CustomerDto>> Create([FromBody] CreateCustomerDto createCustomerDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var createdCustomer = await _customerService.CreateAsync(createCustomerDto);
+            
+            return await ExecuteCreateAsync(
+                async () => createdCustomer,
+                nameof(GetById),
+                new { id = createdCustomer.Id }
+            );
         }
 
         [HttpPut("{id}")]
-        [Authorize(Roles = "Admin,Dev")]
-        public async Task<ActionResult<CustomerDto>> UpdateCustomer(int id, UpdateCustomerDto updateCustomerDto)
+        public async Task<ActionResult<CustomerDto>> Update(int id, [FromBody] UpdateCustomerDto updateCustomerDto)
         {
-            var customer = await _customerService.GetCustomerAsync(id);
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var customer = await _customerService.GetByIdAsync(id);
             if (customer == null)
-                return NotFound();
+            {
+                return NotFound(new { message = "Customer not found", code = "CUSTOMER_NOT_FOUND" });
+            }
 
-            if (!IsAuthorizedForCompany(customer.CompanyId))
-                return Forbid();
-
-            var updatedCustomer = await _customerService.UpdateCustomerAsync(id, updateCustomerDto);
-            if (updatedCustomer == null)
-                return NotFound();
-
-            return Ok(updatedCustomer);
+            return await ExecuteWithValidationAsync(
+                customer.CompanyId,
+                async () => await _customerService.UpdateAsync(id, updateCustomerDto)
+            );
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Admin,Dev")]
-        public async Task<ActionResult> DeleteCustomer(int id)
+        public async Task<IActionResult> Delete(int id)
         {
-            var customer = await _customerService.GetCustomerAsync(id);
+            var customer = await _customerService.GetByIdAsync(id);
             if (customer == null)
-                return NotFound();
+            {
+                return NotFound(new { message = "Customer not found", code = "CUSTOMER_NOT_FOUND" });
+            }
 
-            if (!IsAuthorizedForCompany(customer.CompanyId))
-                return Forbid();
+            return await ExecuteWithValidationAsync(
+                customer.CompanyId,
+                async () => await _customerService.DeleteAsync(id)
+            );
+        }
 
-            var result = await _customerService.DeleteCustomerAsync(id);
-            if (!result)
-                return NotFound();
+        [HttpPut("{id}/status")]
+        public async Task<ActionResult<CustomerDto>> UpdateStatus(int id, [FromBody] UpdateCustomerStatusDto statusDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
 
-            return NoContent();
+            var customer = await _customerService.GetByIdAsync(id);
+            if (customer == null)
+            {
+                return NotFound(new { message = "Customer not found", code = "CUSTOMER_NOT_FOUND" });
+            }
+
+            return await ExecuteWithValidationAsync(
+                customer.CompanyId,
+                async () => await _customerService.UpdateStatusAsync(id, statusDto.Status)
+            );
+        }
+
+        [HttpGet("{id}/orders")]
+        public async Task<ActionResult<IEnumerable<OrderDto>>> GetCustomerOrders(int id)
+        {
+            var customer = await _customerService.GetByIdAsync(id);
+            if (customer == null)
+            {
+                return NotFound(new { message = "Customer not found", code = "CUSTOMER_NOT_FOUND" });
+            }
+
+            return await ExecuteWithValidationAsync(
+                customer.CompanyId,
+                async () => await _customerService.GetCustomerOrdersAsync(id)
+            );
+        }
+
+        [HttpGet("{id}/invoices")]
+        public async Task<ActionResult<IEnumerable<InvoiceDto>>> GetCustomerInvoices(int id)
+        {
+            var customer = await _customerService.GetByIdAsync(id);
+            if (customer == null)
+            {
+                return NotFound(new { message = "Customer not found", code = "CUSTOMER_NOT_FOUND" });
+            }
+
+            return await ExecuteWithValidationAsync(
+                customer.CompanyId,
+                async () => await _customerService.GetCustomerInvoicesAsync(id)
+            );
         }
     }
 } 

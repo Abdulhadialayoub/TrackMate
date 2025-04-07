@@ -19,11 +19,22 @@ namespace TrackMate.API.Data
         public DbSet<InvoiceItem> InvoiceItems { get; set; }
         public DbSet<CompanyBankDetail> CompanyBankDetails { get; set; }
         public DbSet<EmailLog> EmailLogs { get; set; }
+        public DbSet<SystemConfiguration> SystemConfigurations { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
+            // Configure decimal properties
+            ConfigureDecimalPrecision(modelBuilder);
+            
+            // Configure Company self-reference to avoid cascading delete issues
+            modelBuilder.Entity<Company>()
+                .HasOne(c => c.Company)
+                .WithMany()
+                .HasForeignKey(c => c.CompanyId)
+                .OnDelete(DeleteBehavior.NoAction);  // Use NoAction instead of Cascade
+            
             // Company İlişkileri
             modelBuilder.Entity<Company>()
                 .HasMany(c => c.Users)
@@ -85,18 +96,13 @@ namespace TrackMate.API.Data
                 .HasMany(o => o.OrderItems)
                 .WithOne(oi => oi.Order)
                 .HasForeignKey(oi => oi.OrderId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            modelBuilder.Entity<Order>()
-                .HasOne(o => o.Invoice)
-                .WithOne(i => i.Order)
-                .HasForeignKey<Invoice>(i => i.OrderId)
-                .OnDelete(DeleteBehavior.Restrict);
+                .OnDelete(DeleteBehavior.NoAction);
 
             modelBuilder.Entity<Order>()
                 .HasOne(o => o.CreatedByUser)
                 .WithMany()
                 .HasForeignKey(o => o.CreatedBy)
+                .HasPrincipalKey(u => u.Username)
                 .OnDelete(DeleteBehavior.Restrict);
 
             // Invoice İlişkileri
@@ -104,18 +110,19 @@ namespace TrackMate.API.Data
                 .HasMany(i => i.InvoiceItems)
                 .WithOne(ii => ii.Invoice)
                 .HasForeignKey(ii => ii.InvoiceId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.NoAction);
 
             modelBuilder.Entity<Invoice>()
                 .HasOne(i => i.Bank)
                 .WithMany(b => b.Invoices)
-                .HasForeignKey(i => i.BankId)
+                .HasForeignKey(i => i.BankDetailsId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Invoice>()
                 .HasOne(i => i.CreatedByUser)
                 .WithMany()
                 .HasForeignKey(i => i.CreatedBy)
+                .HasPrincipalKey(u => u.Username)
                 .OnDelete(DeleteBehavior.Restrict);
 
             // Product İlişkileri
@@ -137,6 +144,75 @@ namespace TrackMate.API.Data
                 .WithMany()
                 .HasForeignKey(e => e.SentBy)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Check and modify any potential cascade delete relationships
+            // Modify Company relationships to use NoAction
+            foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+            {
+                // Get all relationships
+                foreach (var relationship in entityType.GetForeignKeys())
+                {
+                    // If the delete behavior is Cascade and it's not a self-relationship within the same entity
+                    if (relationship.DeleteBehavior == DeleteBehavior.Cascade)
+                    {
+                        // Change to NoAction
+                        relationship.DeleteBehavior = DeleteBehavior.ClientSetNull;
+                    }
+                }
+            }
+        }
+
+        private void ConfigureDecimalPrecision(ModelBuilder modelBuilder)
+        {
+            // Invoice decimal properties
+            modelBuilder.Entity<Invoice>()
+                .Property(i => i.Subtotal).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Invoice>()
+                .Property(i => i.TaxRate).HasColumnType("decimal(10,2)");
+            modelBuilder.Entity<Invoice>()
+                .Property(i => i.TaxAmount).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Invoice>()
+                .Property(i => i.ShippingCost).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Invoice>()
+                .Property(i => i.Total).HasColumnType("decimal(18,2)");
+            
+            // InvoiceItem decimal properties
+            modelBuilder.Entity<InvoiceItem>()
+                .Property(ii => ii.UnitPrice).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<InvoiceItem>()
+                .Property(ii => ii.Quantity).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<InvoiceItem>()
+                .Property(ii => ii.TaxRate).HasColumnType("decimal(10,2)");
+            modelBuilder.Entity<InvoiceItem>()
+                .Property(ii => ii.TaxAmount).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<InvoiceItem>()
+                .Property(ii => ii.Subtotal).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<InvoiceItem>()
+                .Property(ii => ii.Total).HasColumnType("decimal(18,2)");
+            
+            // Order decimal properties
+            modelBuilder.Entity<Order>()
+                .Property(o => o.SubTotal).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Order>()
+                .Property(o => o.TaxRate).HasColumnType("decimal(10,2)");
+            modelBuilder.Entity<Order>()
+                .Property(o => o.TaxAmount).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Order>()
+                .Property(o => o.ShippingCost).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Order>()
+                .Property(o => o.Total).HasColumnType("decimal(18,2)");
+            
+            // OrderItem decimal properties
+            modelBuilder.Entity<OrderItem>()
+                .Property(oi => oi.UnitPrice).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<OrderItem>()
+                .Property(oi => oi.Total).HasColumnType("decimal(18,2)");
+            
+            // Product decimal properties
+            modelBuilder.Entity<Product>()
+                .Property(p => p.UnitPrice).HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<Product>()
+                .Property(p => p.Weight).HasColumnType("decimal(10,2)");
         }
     }
 }

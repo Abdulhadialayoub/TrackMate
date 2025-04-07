@@ -1,17 +1,44 @@
-﻿namespace TrackMate.API.Models.Entities
+﻿using System;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using TrackMate.API.Models.Enums;
+
+namespace TrackMate.API.Models.Entities
 {
     public class User : BaseEntity
     {
-        public int CompanyId { get; set; }
-        public string UserId { get; set; }
-        public string Fullname { get; set; }
-        public string Email { get; set; }
-        public string Password { get; set; }
-        public string Phone { get; set; }
-        public string Role { get; set; }
-        public string Status { get; set; }
+        [Required]
+        [StringLength(50)]
+        public string Username { get; set; }
 
-        // Navigation Property
-        public virtual Company Company { get; set; }
+        [Required]
+        [EmailAddress]
+        [StringLength(100)]
+        public string Email { get; set; }
+
+        [Required]
+        public string PasswordHash { get; set; }
+
+        [Required]
+        [StringLength(50)]
+        public string FirstName { get; set; }
+
+        [Required]
+        [StringLength(50)]
+        public string LastName { get; set; }
+
+        [Required]
+        [StringLength(20)]
+        public string Phone { get; set; }
+
+        [Required]
+        public UserRole Role { get; set; }
+
+        public DateTime? LastLoginDate { get; set; }
+        public new bool IsActive { get; set; } = true;
+        public new int CompanyId { get; set; }
+        public new virtual Company Company { get; set; }
+        public string RefreshToken { get; set; }
+        public DateTime? RefreshTokenExpiryTime { get; set; }
     }
 }

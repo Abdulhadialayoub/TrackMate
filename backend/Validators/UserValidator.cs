@@ -17,14 +17,26 @@ namespace TrackMate.API.Validators
                 .MinimumLength(6).WithMessage("Password must be at least 6 characters")
                 .MaximumLength(100).WithMessage("Password cannot exceed 100 characters");
 
-            RuleFor(x => x.Fullname)
-                .NotEmpty().WithMessage("Full name is required")
-                .MaximumLength(100).WithMessage("Full name cannot exceed 100 characters");
+            RuleFor(x => x.FirstName)
+                .NotEmpty().WithMessage("First name is required")
+                .MaximumLength(50).WithMessage("First name cannot exceed 50 characters");
+
+            RuleFor(x => x.LastName)
+                .NotEmpty().WithMessage("Last name is required")
+                .MaximumLength(50).WithMessage("Last name cannot exceed 50 characters");
+
+            RuleFor(x => x.Username)
+                .NotEmpty().WithMessage("Username is required")
+                .MaximumLength(50).WithMessage("Username cannot exceed 50 characters");
+
+            RuleFor(x => x.Phone)
+                .NotEmpty().WithMessage("Phone is required")
+                .MaximumLength(20).WithMessage("Phone cannot exceed 20 characters");
 
             RuleFor(x => x.Role)
                 .NotEmpty().WithMessage("Role is required")
-                .Must(role => role == "Admin" || role == "User")
-                .WithMessage("Role must be either 'Admin' or 'User'");
+                .Must(role => role == "Admin" || role == "User" || role == "Dev")
+                .WithMessage("Role must be either 'Admin', 'User' or 'Dev'");
 
             RuleFor(x => x.CompanyId)
                 .NotEmpty().WithMessage("Company ID is required");
@@ -40,22 +52,26 @@ namespace TrackMate.API.Validators
                 .EmailAddress().WithMessage("Invalid email format")
                 .MaximumLength(100).WithMessage("Email cannot exceed 100 characters");
 
-            RuleFor(x => x.Password)
-                .MinimumLength(6).WithMessage("Password must be at least 6 characters")
-                .MaximumLength(100).WithMessage("Password cannot exceed 100 characters")
-                .When(x => !string.IsNullOrEmpty(x.Password));
+            RuleFor(x => x.FirstName)
+                .NotEmpty().WithMessage("First name is required")
+                .MaximumLength(50).WithMessage("First name cannot exceed 50 characters");
 
-            RuleFor(x => x.Fullname)
-                .NotEmpty().WithMessage("Full name is required")
-                .MaximumLength(100).WithMessage("Full name cannot exceed 100 characters");
+            RuleFor(x => x.LastName)
+                .NotEmpty().WithMessage("Last name is required")
+                .MaximumLength(50).WithMessage("Last name cannot exceed 50 characters");
+
+            RuleFor(x => x.Username)
+                .NotEmpty().WithMessage("Username is required")
+                .MaximumLength(50).WithMessage("Username cannot exceed 50 characters");
+
+            RuleFor(x => x.Phone)
+                .NotEmpty().WithMessage("Phone is required")
+                .MaximumLength(20).WithMessage("Phone cannot exceed 20 characters");
 
             RuleFor(x => x.Role)
                 .NotEmpty().WithMessage("Role is required")
-                .Must(role => role == "Admin" || role == "User")
-                .WithMessage("Role must be either 'Admin' or 'User'");
-
-            RuleFor(x => x.CompanyId)
-                .NotEmpty().WithMessage("Company ID is required");
+                .Must(role => role == "Admin" || role == "User" || role == "Dev")
+                .WithMessage("Role must be either 'Admin', 'User' or 'Dev'");
         }
     }
 } 

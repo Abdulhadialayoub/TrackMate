@@ -1,105 +1,101 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System.Linq;
 using TrackMate.API.Data;
 using TrackMate.API.Models.DTOs;
 using TrackMate.API.Models.Entities;
+using TrackMate.API.Exceptions;
 using TrackMate.API.Interfaces;
+using AutoMapper;
 
 namespace TrackMate.API.Services
 {
-    public class CompanyBankDetailService : ICompanyBankDetailService
+    public class CompanyBankDetailService : BaseService<CompanyBankDetail, CompanyBankDetailDto, CreateCompanyBankDetailDto, UpdateCompanyBankDetailDto>, ICompanyBankDetailService
     {
-        private readonly TrackMateDbContext _context;
-
-        public CompanyBankDetailService(TrackMateDbContext context)
+        public CompanyBankDetailService(
+            TrackMateDbContext context,
+            IMapper mapper,
+            ILogger<CompanyBankDetailService> logger) : base(context, mapper, logger)
         {
-            _context = context;
         }
 
-        public async Task<CompanyBankDetailDto> CreateCompanyBankDetailAsync(CreateCompanyBankDetailDto createCompanyBankDetailDto)
+        protected override async Task<CompanyBankDetail> GetEntityByIdAsync(int id)
         {
-            var bankDetail = new CompanyBankDetail
-            {
-                CompanyId = createCompanyBankDetailDto.CompanyId,
-                BankName = createCompanyBankDetailDto.BankName,
-                AccountName = createCompanyBankDetailDto.AccountName,
-                IBAN = createCompanyBankDetailDto.IBAN,
-                SWIFT = createCompanyBankDetailDto.SWIFT,
-                Currency = createCompanyBankDetailDto.Currency,
-                CreatedDate = DateTime.UtcNow
-            };
-
-            _context.CompanyBankDetails.Add(bankDetail);
-            await _context.SaveChangesAsync();
-
-            return await GetCompanyBankDetailAsync(bankDetail.Id);
+            return await _dbSet
+                .Include(bd => bd.Company)
+                .FirstOrDefaultAsync(bd => bd.Id == id && !bd.IsDeleted);
         }
 
-        public async Task<CompanyBankDetailDto?> GetCompanyBankDetailAsync(int id)
+        public new async Task<IEnumerable<CompanyBankDetailDto>> GetByCompanyIdAsync(int companyId)
         {
-            var bankDetail = await _context.CompanyBankDetails
-                .Include(b => b.Company)
-                .FirstOrDefaultAsync(b => b.Id == id);
-
-            if (bankDetail == null) return null;
-
-            return new CompanyBankDetailDto
-            {
-                Id = bankDetail.Id,
-                CompanyId = bankDetail.CompanyId,
-                CompanyName = bankDetail.Company?.Name ?? string.Empty,
-                BankName = bankDetail.BankName,
-                AccountName = bankDetail.AccountName,
-                IBAN = bankDetail.IBAN,
-                SWIFT = bankDetail.SWIFT,
-                Currency = bankDetail.Currency,
-                CreatedDate = bankDetail.CreatedDate
-            };
+            return await base.GetByCompanyIdAsync(companyId);
         }
 
-        public async Task<IEnumerable<CompanyBankDetailDto>> GetCompanyBankDetailsAsync()
+        public async Task<CompanyBankDetailDto> GetByCompanyIdAndBankDetailIdAsync(int companyId, int bankDetailId)
         {
-            var bankDetails = await _context.CompanyBankDetails
-                .Include(b => b.Company)
-                .ToListAsync();
+            var bankDetail = await _dbSet
+                .Include(bd => bd.Company)
+                .FirstOrDefaultAsync(bd => bd.CompanyId == companyId && bd.Id == bankDetailId && !bd.IsDeleted);
 
-            return bankDetails.Select(b => new CompanyBankDetailDto
-            {
-                Id = b.Id,
-                CompanyId = b.CompanyId,
-                CompanyName = b.Company?.Name ?? string.Empty,
-                BankName = b.BankName,
-                AccountName = b.AccountName,
-                IBAN = b.IBAN,
-                SWIFT = b.SWIFT,
-                Currency = b.Currency,
-                CreatedDate = b.CreatedDate
-            });
+            if (bankDetail == null)
+                return null;
+
+            return _mapper.Map<CompanyBankDetailDto>(bankDetail);
         }
 
-        public async Task<CompanyBankDetailDto?> UpdateCompanyBankDetailAsync(int id, UpdateCompanyBankDetailDto updateCompanyBankDetailDto)
+        public async Task<CompanyBankDetailDto> GetCompanyBankDetailByIdAsync(int id)
         {
-            var bankDetail = await _context.CompanyBankDetails.FindAsync(id);
-            if (bankDetail == null) return null;
-
-            bankDetail.BankName = updateCompanyBankDetailDto.BankName;
-            bankDetail.AccountName = updateCompanyBankDetailDto.AccountName;
-            bankDetail.IBAN = updateCompanyBankDetailDto.IBAN;
-            bankDetail.SWIFT = updateCompanyBankDetailDto.SWIFT;
-            bankDetail.Currency = updateCompanyBankDetailDto.Currency;
-
-            await _context.SaveChangesAsync();
-
-            return await GetCompanyBankDetailAsync(bankDetail.Id);
+            return await GetByIdAsync(id);
         }
 
-        public async Task<bool> DeleteCompanyBankDetailAsync(int id)
+        public async Task<CompanyBankDetailDto[]> GetCompanyBankDetailsByCompanyIdAsync(int companyId)
         {
-            var bankDetail = await _context.CompanyBankDetails.FindAsync(id);
-            if (bankDetail == null) return false;
+            var bankDetails = await _dbSet
+                .Include(bd => bd.Company)
+                .Where(bd => bd.CompanyId == companyId && !bd.IsDeleted)
+                .ToArrayAsync();
 
-            _context.CompanyBankDetails.Remove(bankDetail);
-            await _context.SaveChangesAsync();
-            return true;
+            return _mapper.Map<CompanyBankDetailDto[]>(bankDetails);
+        }
+
+        public async Task<CompanyBankDetailDto> CreateCompanyBankDetailAsync(CreateCompanyBankDetailDto dto)
+        {
+            // Validate company exists
+            var company = await _context.Companies.FindAsync(dto.CompanyId);
+            if (company == null)
+                throw new ApiException("Company not found", 404, "COMPANY_NOT_FOUND");
+
+            // Validate IBAN uniqueness within company
+            if (await _dbSet.AnyAsync(bd => bd.CompanyId == dto.CompanyId && bd.IBAN == dto.IBAN && !bd.IsDeleted))
+                throw new ApiException("Bank detail with this IBAN already exists", 400, "DUPLICATE_IBAN");
+
+            return await CreateAsync(dto);
+        }
+
+        public async Task<CompanyBankDetailDto> UpdateCompanyBankDetailAsync(int id, UpdateCompanyBankDetailDto dto)
+        {
+            var existingBankDetail = await GetEntityByIdAsync(id);
+            if (existingBankDetail == null)
+                throw new ApiException("Bank detail not found", 404, "BANK_DETAIL_NOT_FOUND");
+
+            // Validate IBAN uniqueness within company
+            if (await _dbSet.AnyAsync(bd => bd.CompanyId == existingBankDetail.CompanyId && bd.IBAN == dto.IBAN && bd.Id != id && !bd.IsDeleted))
+                throw new ApiException("Bank detail with this IBAN already exists", 400, "DUPLICATE_IBAN");
+
+            return await UpdateAsync(id, dto);
+        }
+
+        public async Task DeleteCompanyBankDetailAsync(int id)
+        {
+            // Check if bank detail is used in any invoices
+            var hasInvoices = await _context.Invoices.AnyAsync(i => i.BankDetailsId == id && !i.IsDeleted);
+            if (hasInvoices)
+                throw new ApiException("Cannot delete bank detail that is used in invoices", 400, "BANK_DETAIL_IN_USE");
+
+            await DeleteAsync(id);
         }
     }
 } 

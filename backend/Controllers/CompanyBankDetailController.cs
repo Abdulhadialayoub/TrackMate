@@ -10,76 +10,96 @@ namespace TrackMate.API.Controllers
     [Route("api/[controller]")]
     public class CompanyBankDetailController : BaseController
     {
-        private readonly ICompanyBankDetailService _companyBankDetailService;
+        private readonly ICompanyBankDetailService _bankDetailService;
+        private readonly ILogger<CompanyBankDetailController> _logger;
 
-        public CompanyBankDetailController(ICompanyBankDetailService companyBankDetailService)
+        public CompanyBankDetailController(
+            ICompanyBankDetailService bankDetailService,
+            ILogger<CompanyBankDetailController> logger)
         {
-            _companyBankDetailService = companyBankDetailService;
+            _bankDetailService = bankDetailService;
+            _logger = logger;
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin,Dev")]
-        public async Task<ActionResult<CompanyBankDetailDto>> CreateCompanyBankDetail(CreateCompanyBankDetailDto createCompanyBankDetailDto)
+        public async Task<ActionResult<CompanyBankDetailDto>> CreateBankDetail([FromBody] CreateCompanyBankDetailDto dto)
         {
-            var bankDetail = await _companyBankDetailService.CreateCompanyBankDetailAsync(createCompanyBankDetailDto);
-            return CreatedAtAction(nameof(GetCompanyBankDetail), new { id = bankDetail.Id }, bankDetail);
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            return await ExecuteWithValidationAsync(
+                dto.CompanyId,
+                async () =>
+                {
+                    dto.CreatedBy = GetUserEmail();
+                    return await _bankDetailService.CreateAsync(dto);
+                }
+            );
         }
 
         [HttpGet("{id}")]
-        public async Task<ActionResult<CompanyBankDetailDto>> GetCompanyBankDetail(int id)
+        public async Task<ActionResult<CompanyBankDetailDto>> GetBankDetail(int id)
         {
-            var bankDetail = await _companyBankDetailService.GetCompanyBankDetailAsync(id);
+            var bankDetail = await _bankDetailService.GetByIdAsync(id);
             if (bankDetail == null)
-                return NotFound();
+            {
+                return NotFound(new { message = "Bank detail not found", code = "BANK_DETAIL_NOT_FOUND" });
+            }
 
-            if (!IsAuthorizedForCompany(bankDetail.CompanyId))
-                return Forbid();
-
-            return Ok(bankDetail);
+            return await ExecuteWithValidationAsync(
+                bankDetail.CompanyId,
+                async () => bankDetail
+            );
         }
 
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<CompanyBankDetailDto>>> GetCompanyBankDetails()
+        [HttpGet("company/{companyId}")]
+        public async Task<ActionResult<IEnumerable<CompanyBankDetailDto>>> GetBankDetails(int companyId)
         {
-            var bankDetails = await _companyBankDetailService.GetCompanyBankDetailsAsync();
-            var authorizedBankDetails = bankDetails.Where(b => IsAuthorizedForCompany(b.CompanyId));
-            return Ok(authorizedBankDetails);
+            return await ExecuteWithValidationAsync(
+                companyId,
+                async () => await _bankDetailService.GetByCompanyIdAsync(companyId)
+            );
         }
 
         [HttpPut("{id}")]
-        [Authorize(Roles = "Admin,Dev")]
-        public async Task<ActionResult<CompanyBankDetailDto>> UpdateCompanyBankDetail(int id, UpdateCompanyBankDetailDto updateCompanyBankDetailDto)
+        public async Task<ActionResult<CompanyBankDetailDto>> UpdateBankDetail(int id, [FromBody] UpdateCompanyBankDetailDto dto)
         {
-            var bankDetail = await _companyBankDetailService.GetCompanyBankDetailAsync(id);
-            if (bankDetail == null)
-                return NotFound();
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
 
-            if (!IsAuthorizedForCompany(bankDetail.CompanyId))
-                return Forbid();
+            var existingBankDetail = await _bankDetailService.GetByIdAsync(id);
+            if (existingBankDetail == null)
+            {
+                return NotFound(new { message = "Bank detail not found", code = "BANK_DETAIL_NOT_FOUND" });
+            }
 
-            var updatedBankDetail = await _companyBankDetailService.UpdateCompanyBankDetailAsync(id, updateCompanyBankDetailDto);
-            if (updatedBankDetail == null)
-                return NotFound();
-
-            return Ok(updatedBankDetail);
+            return await ExecuteWithValidationAsync(
+                existingBankDetail.CompanyId,
+                async () =>
+                {
+                    dto.UpdatedBy = GetUserEmail();
+                    return await _bankDetailService.UpdateAsync(id, dto);
+                }
+            );
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Admin,Dev")]
-        public async Task<ActionResult> DeleteCompanyBankDetail(int id)
+        public async Task<IActionResult> DeleteBankDetail(int id)
         {
-            var bankDetail = await _companyBankDetailService.GetCompanyBankDetailAsync(id);
+            var bankDetail = await _bankDetailService.GetByIdAsync(id);
             if (bankDetail == null)
-                return NotFound();
+            {
+                return NotFound(new { message = "Bank detail not found", code = "BANK_DETAIL_NOT_FOUND" });
+            }
 
-            if (!IsAuthorizedForCompany(bankDetail.CompanyId))
-                return Forbid();
-
-            var result = await _companyBankDetailService.DeleteCompanyBankDetailAsync(id);
-            if (!result)
-                return NotFound();
-
-            return NoContent();
+            return await ExecuteWithValidationAsync(
+                bankDetail.CompanyId,
+                async () => await _bankDetailService.DeleteAsync(id)
+            );
         }
     }
 } 
