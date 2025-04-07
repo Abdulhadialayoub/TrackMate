@@ -1,0 +1,36 @@
+{
+  "name": "frontend-mobile",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "proxy": "node proxy-server.js",
+    "dev": "npm run proxy & npm run start"
+  },
+  "dependencies": {
+    "@react-navigation/bottom-tabs": "^7.3.9",
+    "@react-navigation/native": "^7.1.5",
+    "@react-navigation/native-stack": "^7.3.9",
+    "axios": "^1.8.4",
+    "cors": "^2.8.5",
+    "expo": "~52.0.43",
+    "expo-network": "^7.0.5",
+    "expo-secure-store": "^14.0.1",
+    "expo-status-bar": "~2.0.1",
+    "express": "^4.18.2",
+    "http-proxy-middleware": "^2.0.6",
+    "react": "18.3.1",
+    "react-native": "0.76.9",
+    "react-native-paper": "^5.13.1",
+    "react-native-vector-icons": "^10.2.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@types/react": "~18.3.12",
+    "typescript": "^5.3.3"
+  },
+  "private": true
+}
