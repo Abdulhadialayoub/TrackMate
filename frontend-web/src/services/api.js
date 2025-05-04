@@ -3,6 +3,7 @@ import axios from 'axios';
 // API Configuration
 const API_CONFIG = {
   // Base URL for API requests
+  //https://localhost:7092/api
   BASE_URL: 'https://localhost:7092/api',
   
   // API Endpoints
@@ -31,6 +32,38 @@ const API_CONFIG = {
     ACCESS_TOKEN: 120 * 60 * 1000, // 120 minutes
     REFRESH_TOKEN: 7 * 24 * 60 * 60 * 1000, // 7 days
   },
+};
+
+// Helper function to normalize data from ReferenceHandler.Preserve format
+export const normalizeJsonResponse = (data) => {
+  // If it's null or undefined, return as is
+  if (data == null) return data;
+  
+  // If it's an array, normalize each item
+  if (Array.isArray(data)) {
+    return data.map(item => normalizeJsonResponse(item));
+  }
+  
+  // If it's not an object, return as is
+  if (typeof data !== 'object') return data;
+  
+  // Check for $values property (array in ReferenceHandler.Preserve format)
+  if (data.$values && Array.isArray(data.$values)) {
+    console.log('Normalizing $values array with', data.$values.length, 'items');
+    return data.$values.map(item => normalizeJsonResponse(item));
+  }
+  
+  // If it's a regular object, normalize each property
+  const result = {};
+  for (const key in data) {
+    // Skip $id and $ref properties as they're ReferenceHandler.Preserve metadata
+    if (key === '$id' || key === '$ref') continue;
+    
+    // Recursively normalize nested objects
+    result[key] = normalizeJsonResponse(data[key]);
+  }
+  
+  return result;
 };
 
 // Create axios instance with base URL
@@ -67,83 +100,60 @@ api.interceptors.request.use(
   }
 );
 
-// Add response interceptor to handle token refresh
+// Add better debugging for API requests and responses
+const handleApiError = (error, endpoint) => {
+  console.error(`API Error for ${endpoint}:`, error);
+  
+  if (error.response) {
+    // The request was made and the server responded with a status code
+    // that falls out of the range of 2xx
+    console.error(`Status: ${error.response.status}`);
+    console.error(`Headers:`, error.response.headers);
+    console.error(`Data:`, error.response.data);
+    
+    // Log validation errors in a more readable format
+    if (error.response.status === 400 && error.response.data?.errors) {
+      console.error("Validation Errors:");
+      Object.entries(error.response.data.errors).forEach(([field, messages]) => {
+        console.error(`- ${field}: ${messages.join(', ')}`);
+      });
+    }
+  } else if (error.request) {
+    // The request was made but no response was received
+    console.error(`No response received for request:`, error.request);
+  } else {
+    // Something happened in setting up the request that triggered an Error
+    console.error(`Error setting up request:`, error.message);
+  }
+  
+  return error;
+};
+
+// Add response interceptor to handle token refresh and normalize JSON responses
 api.interceptors.response.use(
   (response) => {
-    // For debugging
-    console.log(`Response from ${response.config.url}: Status ${response.status}`);
-    return response;
-  },
-  async (error) => {
-    // For debugging
-    console.error('API Error Details:', {
-      url: error.config?.url,
-      baseURL: error.config?.baseURL,
-      method: error.config?.method,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      message: error.message,
-      name: error.name,
-      code: error.code
-    });
-
-    // Detailed network error logging
-    if (error.message === 'Network Error') {
-      console.error(`Network Error: Unable to connect to ${error.config?.baseURL}${error.config?.url}`);
-      console.error('Please check server is running and accessible');
-    }
-    else if (error.code === 'ECONNABORTED') {
-      console.error(`Request timeout when connecting to ${error.config?.url}`);
-    }
-    else if (error.code === 'ERR_CONNECTION_REFUSED') {
-      console.error(`Connection refused to ${error.config?.baseURL}${error.config?.url}`);
-      console.error('The server may not be running or the port may be blocked.');
-    }
-
-    const originalRequest = error.config;
-
-    // If error is 401 and we haven't tried to refresh token yet
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
+    console.log(`Response from ${response.config.url}:`, `Status ${response.status}`);
+    
+    // Normalize the response data to handle ReferenceHandler.Preserve format
+    if (response.data) {
       try {
-        const refreshToken = localStorage.getItem('refresh_token');
-        if (!refreshToken) {
-          // No refresh token, user needs to login again
-          localStorage.removeItem('token');
-          window.location.href = '/login';
-          return Promise.reject(error);
-        }
-
-        // Try to refresh the token
-        const response = await axios.post(
-          `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTH.REFRESH_TOKEN}`,
-          { refreshToken },
-          {
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            timeout: 10000,
-            validateStatus: (status) => status >= 200 && status < 500,
+        // Only apply normalization for successful responses
+        if (response.status >= 200 && response.status < 300) {
+          const normalizedData = normalizeJsonResponse(response.data);
+          if (normalizedData !== response.data) {
+            console.log('Normalized response data for', response.config.url);
+            response.data = normalizedData;
           }
-        );
-
-        const { token } = response.data;
-        localStorage.setItem('token', token);
-
-        // Retry the original request with new token
-        originalRequest.headers.Authorization = `Bearer ${token}`;
-        return api(originalRequest);
-      } catch (refreshError) {
-        // Refresh token failed, clear tokens and redirect to login
-        localStorage.removeItem('token');
-        localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
-        return Promise.reject(refreshError);
+        }
+      } catch (error) {
+        console.error('Error normalizing response data:', error);
       }
     }
-
+    
+    return response;
+  },
+  (error) => {
+    handleApiError(error, error.config?.url || 'unknown endpoint');
     return Promise.reject(error);
   }
 );
@@ -170,6 +180,28 @@ export const authService = {
         localStorage.setItem('refresh_token', response.data.refreshToken);
         localStorage.setItem('user_id', response.data.user.id.toString());
         localStorage.setItem('user_role', response.data.user.role);
+        
+        // Store user name consistently
+        localStorage.setItem('user_name', response.data.user.name || response.data.user.fullName || 
+          `${response.data.user.firstName || ''} ${response.data.user.lastName || ''}`.trim() || 
+          response.data.user.username || response.data.user.email);
+          
+        // Store username separately
+        localStorage.setItem('username', response.data.user.username || response.data.user.email);
+        
+        // Store full name if available
+        if (response.data.user.firstName || response.data.user.lastName) {
+          localStorage.setItem('fullname', `${response.data.user.firstName || ''} ${response.data.user.lastName || ''}`.trim());
+        }
+        
+        // Log stored user info for debugging
+        console.log('Stored user info:', {
+          user_id: localStorage.getItem('user_id'),
+          user_role: localStorage.getItem('user_role'),
+          user_name: localStorage.getItem('user_name'),
+          username: localStorage.getItem('username'),
+          fullname: localStorage.getItem('fullname')
+        });
       }
       
       return {
@@ -190,26 +222,34 @@ export const authService = {
   // Register a new user
   register: async (userData) => {
     try {
-      // Convert to API format
+      console.log('Registration data received:', userData);
+      
+      // Convert to API format - based on the expected API schema
       const registerData = {
+        companyName: userData.companyName || `${userData.firstName}'s Company`,
         firstName: userData.firstName,
         lastName: userData.lastName,
         email: userData.email,
-        password: userData.password,
-        companyName: userData.companyName || `${userData.firstName}'s Company` // Default company name
+        password: userData.password
       };
+      
+      console.log('Sending registration data:', registerData);
       
       const response = await api.post(
         API_CONFIG.ENDPOINTS.AUTH.REGISTER, 
         registerData
       );
       
+      console.log('Registration response:', response.data);
+      
       // Store tokens
       if (response.data.token) {
         localStorage.setItem('token', response.data.token);
         localStorage.setItem('refresh_token', response.data.refreshToken);
-        localStorage.setItem('user_id', response.data.user.id.toString());
-        localStorage.setItem('user_role', response.data.user.role);
+        localStorage.setItem('user_id', response.data.user?.id?.toString() || '');
+        localStorage.setItem('user_role', response.data.user?.role || '');
+        localStorage.setItem('username', response.data.user?.username || response.data.user?.email || '');
+        localStorage.setItem('company_id', response.data.user?.companyId?.toString() || '');
       }
       
       return {
@@ -218,11 +258,20 @@ export const authService = {
         data: response.data
       };
     } catch (error) {
-      console.error('Registration error:', error.response?.data);
+      console.error('Registration error:', error);
+      console.error('Error details:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      
+      if (error.response) {
+        // Log more details for debugging
+        console.error('Error headers:', error.response.headers);
+        console.error('Error config:', error.config);
+      }
+      
       return {
         success: false,
-        message: error.response?.data?.message || 'Registration failed',
-        error: error.response?.data
+        message: error.response?.data?.message || error.message || 'Registration failed',
+        error: error.response?.data || error
       };
     }
   },
@@ -276,11 +325,16 @@ export const authService = {
       // Call logout endpoint
       await api.post(API_CONFIG.ENDPOINTS.AUTH.LOGOUT);
       
-      // Clear tokens from storage
+      // Clear all user data from storage
       localStorage.removeItem('token');
       localStorage.removeItem('refresh_token');
       localStorage.removeItem('user_id');
       localStorage.removeItem('user_role');
+      localStorage.removeItem('user_name');
+      localStorage.removeItem('username');
+      localStorage.removeItem('fullname');
+      localStorage.removeItem('company_id');
+      localStorage.removeItem('user_email');
       
       window.location.href = '/login';
     } catch (error) {
@@ -290,6 +344,11 @@ export const authService = {
       localStorage.removeItem('refresh_token');
       localStorage.removeItem('user_id');
       localStorage.removeItem('user_role');
+      localStorage.removeItem('user_name');
+      localStorage.removeItem('username');
+      localStorage.removeItem('fullname');
+      localStorage.removeItem('company_id');
+      localStorage.removeItem('user_email');
       window.location.href = '/login';
     }
   },

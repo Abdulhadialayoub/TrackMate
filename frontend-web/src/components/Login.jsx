@@ -13,10 +13,11 @@ import {
   CircularProgress
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
-import { authService } from '../services/api';
+import { useAppContext } from '../context/AppContext';
 
 const Login = () => {
   const navigate = useNavigate();
+  const { login, isAuthenticated: contextIsAuthenticated } = useAppContext();
   const [formData, setFormData] = useState({
     username: '',
     password: ''
@@ -26,17 +27,11 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
   
-  // Check if user is already logged in
   useEffect(() => {
-    const checkAuth = async () => {
-      const isAuthenticated = await authService.isAuthenticated();
-      if (isAuthenticated) {
-        navigate('/dashboard');
-      }
-    };
-    
-    checkAuth();
-  }, [navigate]);
+    if (contextIsAuthenticated) {
+      navigate('/dashboard');
+    }
+  }, [contextIsAuthenticated, navigate]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -80,21 +75,20 @@ const Login = () => {
     setApiError('');
     
     try {
-      // Use the updated authService with credentials object
-      const result = await authService.login({
+      const result = await login({
         username: formData.username,
         password: formData.password
       });
       
       if (result.success) {
-        console.log('Login successful, redirecting to dashboard');
+        console.log('Login successful via context, redirecting to dashboard');
         navigate('/dashboard');
       } else {
         setApiError(result.message || 'Login failed');
       }
     } catch (error) {
-      setApiError('An unexpected error occurred. Please try again.');
-      console.error('Login error:', error);
+      setApiError('An unexpected error occurred during login attempt.');
+      console.error('Login component error:', error);
     } finally {
       setLoading(false);
     }

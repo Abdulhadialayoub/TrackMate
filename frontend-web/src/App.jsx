@@ -15,6 +15,15 @@ import CompanyLogs from './components/CompanyLogs';
 import AppLayout from './components/layout/AppLayout';
 import ComingSoon from './components/ComingSoon';
 import RoleBasedRoute from './components/RoleBasedRoute';
+import Products from './components/Products';
+import Customers from './components/Customers';
+import Orders from './components/Orders';
+import Invoices from './components/Invoices';
+import UserProfile from './components/UserProfile';
+import Settings from './components/Settings';
+import { AppProvider, useAppContext } from './context/AppContext';
+import Notifications from './components/common/Notifications';
+import Categories from './components/Categories';
 
 const theme = createTheme({
   palette: {
@@ -142,47 +151,55 @@ const theme = createTheme({
 });
 
 const PrivateRoute = ({ children }) => {
-  const token = localStorage.getItem('token');
-  return token ? children : <Navigate to="/login" />;
+  const { isAuthenticated } = useAppContext();
+  console.log("PrivateRoute Check:", isAuthenticated);
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
 };
 
 function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Router>
-        <Routes>
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          
-          {/* Protected routes with AppLayout */}
-          <Route element={<PrivateRoute><AppLayout /></PrivateRoute>}>
-            {/* Common routes accessible to all authenticated users */}
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/manager-view" element={<ManagerView />} />
-            <Route path="/viewer-panel" element={<ViewerPanel />} />
-            <Route path="/companies" element={<CompanyList />} />
-            <Route path="/user-management" element={<UserManagement />} />
-            <Route path="/activity-logs" element={<CompanyLogs />} />
+    <AppProvider>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Router>
+          <Routes>
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
             
-            {/* Add placeholder routes for new features */}
-            <Route path="/products" element={<ComingSoon title="Products" />} />
-            <Route path="/customers" element={<ComingSoon title="Customers" />} />
-            <Route path="/orders" element={<ComingSoon title="Orders" />} />
-            <Route path="/invoices" element={<ComingSoon title="Invoices" />} />
-            <Route path="/profile" element={<ComingSoon title="User Profile" />} />
-            <Route path="/settings" element={<ComingSoon title="Settings" />} />
-            
-            {/* Dev-only routes */}
-            <Route element={<RoleBasedRoute allowedRoles={['Dev']} />}>
-              <Route path="/dev-panel" element={<DevPanel />} />
-              <Route path="/role-manager" element={<RoleManager />} />
+            {/* Protected routes with AppLayout */}
+            <Route element={<PrivateRoute><AppLayout /></PrivateRoute>}>
+              {/* Common routes accessible to all authenticated users */}
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/manager-view" element={<ManagerView />} />
+              <Route path="/viewer-panel" element={<ViewerPanel />} />
+              <Route path="/companies" element={<CompanyList />} />
+              <Route path="/user-management" element={<UserManagement />} />
+              <Route path="/activity-logs" element={<CompanyLogs />} />
+              
+              {/* Business module pages */}
+              <Route path="/products" element={<Products />} />
+              <Route path="/customers" element={<Customers />} />
+              <Route path="/orders" element={<Orders />} />
+              <Route path="/invoices" element={<Invoices />} />
+              <Route path="/profile" element={<UserProfile />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/categories" element={<Categories />} />
+              
+              {/* Dev-only routes */}
+              <Route element={<RoleBasedRoute allowedRoles={['Dev']} />}>
+                <Route path="/dev-panel" element={<DevPanel />} />
+                <Route path="/role-manager" element={<RoleManager />} />
+              </Route>
             </Route>
-          </Route>
-        </Routes>
-      </Router>
-    </ThemeProvider>
+
+            {/* Catch-all or Not Found Route */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+          <Notifications />
+        </Router>
+      </ThemeProvider>
+    </AppProvider>
   );
 }
 

@@ -37,6 +37,7 @@ import {
   ExpandLess,
   ExpandMore,
   ChevronRight,
+  Category as CategoryIcon,
 } from '@mui/icons-material';
 import { authService } from '../../services/api';
 import { motion } from 'framer-motion';
@@ -141,13 +142,20 @@ const AppLayout = () => {
     return location.pathname === path;
   };
   
-  const menuItems = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
-    { text: 'Products', icon: <InventoryIcon />, path: '/products' },
-    { text: 'Customers', icon: <PeopleIcon />, path: '/customers' },
-    { text: 'Orders', icon: <OrdersIcon />, path: '/orders' },
-    { text: 'Invoices', icon: <InvoicesIcon />, path: '/invoices' },
-  ];
+  // Define menu items - all users including developers see all menu items
+  const getMenuItems = () => {
+    // All users see the same menu items
+    return [
+      { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
+      { text: 'Products', icon: <InventoryIcon />, path: '/products' },
+      { text: 'Categories', icon: <CategoryIcon />, path: '/categories' },
+      { text: 'Customers', icon: <PeopleIcon />, path: '/customers' },
+      { text: 'Orders', icon: <OrdersIcon />, path: '/orders' },
+      { text: 'Invoices', icon: <InvoicesIcon />, path: '/invoices' },
+    ];
+  };
+  
+  const menuItems = getMenuItems();
   
   const adminMenuItems = [
     { text: 'User Management', icon: <PeopleIcon />, path: '/user-management' },
@@ -199,45 +207,7 @@ const AppLayout = () => {
           </ListItem>
         ))}
         
-        {(userProfile?.role === 'Admin' || userProfile?.role === 'Dev') && (
-          <>
-            <Divider sx={{ my: 1 }} />
-            <ListItemButton onClick={handleAdminMenuToggle}>
-              <ListItemIcon>
-                <SettingsIcon />
-              </ListItemIcon>
-              <ListItemText primary="Administration" />
-              {adminMenuOpen ? <ExpandLess /> : <ExpandMore />}
-            </ListItemButton>
-            <Collapse in={adminMenuOpen} timeout="auto" unmountOnExit>
-              <List component="div" disablePadding>
-                {adminMenuItems.map((item) => (
-                  <ListItem 
-                    button 
-                    key={item.text} 
-                    onClick={() => navigate(item.path)}
-                    sx={{
-                      pl: 4,
-                      backgroundColor: isActive(item.path) ? 'rgba(0, 0, 0, 0.04)' : 'transparent',
-                      borderLeft: isActive(item.path) ? `4px solid ${theme.palette.primary.main}` : '4px solid transparent',
-                    }}
-                  >
-                    <ListItemIcon sx={{ color: isActive(item.path) ? theme.palette.primary.main : 'inherit' }}>
-                      {item.icon}
-                    </ListItemIcon>
-                    <ListItemText 
-                      primary={item.text} 
-                      primaryTypographyProps={{
-                        fontWeight: isActive(item.path) ? 'medium' : 'normal',
-                        color: isActive(item.path) ? theme.palette.primary.main : 'inherit'
-                      }}
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            </Collapse>
-          </>
-        )}
+        {/* Administration section removed as requested */}
         
         {/* Developer Tools section - only visible to users with Dev role */}
         {userProfile?.role === 'Dev' && (
@@ -371,12 +341,6 @@ const AppLayout = () => {
               </ListItemIcon>
               Profile
             </MenuItem>
-            <MenuItem onClick={() => { handleMenuClose(); navigate('/settings'); }}>
-              <ListItemIcon>
-                <SettingsIcon fontSize="small" />
-              </ListItemIcon>
-              Settings
-            </MenuItem>
             <Divider />
             <MenuItem onClick={handleLogout}>
               <ListItemIcon>
@@ -443,8 +407,12 @@ const AppLayout = () => {
         <Toolbar /> {/* Spacer for fixed AppBar */}
         <PageTransition
           variant={isActive('/dashboard') ? 'fade' : 
-                  location.pathname.includes('/products') ? 'slideRight' : 
-                  location.pathname.includes('/customers') ? 'scale' : 'slideUp'}
+                  location.pathname.includes('/products') ? 'slideRight' :
+                  location.pathname.includes('/categories') ? 'fade' :
+                  location.pathname.includes('/customers') ? 'scale' : 
+                  location.pathname.includes('/orders') ? 'slideDown' :
+                  location.pathname.includes('/invoices') ? 'rotate' :
+                  'slideUp'}
           transition={isActive('/dashboard') ? 'default' : 'smooth'}
           delay={0.1}
           style={{ flex: 1, display: 'flex', flexDirection: 'column' }}

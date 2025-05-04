@@ -24,7 +24,6 @@ const Register = () => {
     firstName: '',
     lastName: '',
     email: '',
-    username: '',
     phone: '',
     password: '',
     confirmPassword: ''
@@ -66,7 +65,7 @@ const Register = () => {
   const validateForm = () => {
     const newErrors = {};
     
-    if (!formData.companyName) {
+    if (!formData.companyName || !formData.companyName.trim()) {
       newErrors.companyName = 'Company name is required';
     }
     
@@ -82,10 +81,6 @@ const Register = () => {
       newErrors.email = 'Email is required';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Email is invalid';
-    }
-    
-    if (!formData.username) {
-      newErrors.username = 'Username is required';
     }
     
     if (!formData.phone) {
@@ -119,19 +114,16 @@ const Register = () => {
     setApiError('');
     
     try {
+      // Simplified payload based on API requirements
       const registerData = {
-        companyName: formData.companyName,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
-        username: formData.username || formData.email, // Use email as username if not provided
-        phone: formData.phone,
-        password: formData.password,
-        role: 'User', // Default role
-        createdBy: 'web-registration' // Set createdBy to avoid NULL constraint violation
+        companyName: formData.companyName.trim(),
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        email: formData.email.trim(),
+        password: formData.password
       };
       
-      console.log('Attempting to register user:', registerData.email);
+      console.log('Attempting to register user with data:', registerData);
       const result = await authService.register(registerData);
       
       if (result.success) {
@@ -252,20 +244,6 @@ const Register = () => {
               onChange={handleChange}
               error={!!errors.email}
               helperText={errors.email}
-            />
-            
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              id="username"
-              label="Username"
-              name="username"
-              autoComplete="username"
-              value={formData.username}
-              onChange={handleChange}
-              error={!!errors.username}
-              helperText={errors.username || 'Choose a unique username for login'}
             />
             
             <TextField
