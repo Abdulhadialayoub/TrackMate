@@ -46,7 +46,23 @@ const OrdersScreen = ({ navigation }) => {
       
       if (result.success) {
         console.log(`Retrieved ${result.data?.length || 0} orders`);
-        setOrders(result.data || []);
+        
+        // Process orders to ensure customer names are properly displayed
+        const processedOrders = result.data.map(order => {
+          return {
+            ...order,
+            // Ensure we have a customer name with multiple fallbacks
+            customerName: order.customerName || 
+                        (order.customer && typeof order.customer === 'object' ? order.customer.name : null) || 
+                        (order.customerId ? `Customer #${order.customerId}` : 'Unknown Customer'),
+            // Ensure we have proper total calculated
+            total: parseFloat(order.totalAmount || order.total || 0)
+          };
+        });
+        
+        // Web approach: Simply use all orders without filtering
+        console.log(`Showing all ${processedOrders.length} orders - using web version approach`);
+        setOrders(processedOrders || []);
       } else {
         console.error('Error fetching orders:', result.message);
         showSnackbar(`Error: ${result.message}`, 'error');
@@ -92,33 +108,14 @@ const OrdersScreen = ({ navigation }) => {
   };
   
   const cleanupDuplicateOrders = async () => {
-    showSnackbar('Cleaning up duplicate temporary orders...', 'info');
+    showSnackbar('Refreshing orders...', 'info');
     
-    // Create a map to track seen order numbers
-    const seenOrderNumbers = new Map();
-    const validOrders = [];
-    const duplicates = [];
+    // Simply refresh the orders without removing any duplicates
+    // to match the web version's behavior
+    console.log(`Processing all ${orders.length} orders without removing duplicates`);
     
-    orders.forEach(order => {
-      // If this is a real order with a real ID, always keep it
-      if (order.id && !order.id.toString().startsWith('temp-') && !order.orderNumber?.startsWith('TMP-')) {
-        seenOrderNumbers.set(order.orderNumber, true);
-        validOrders.push(order);
-        return;
-      }
-      
-      // For temporary orders, check if we've seen this order number
-      if (seenOrderNumbers.has(order.orderNumber)) {
-        duplicates.push(order);
-      } else {
-        // If we haven't seen it, mark it as seen and keep it
-        seenOrderNumbers.set(order.orderNumber, true);
-        validOrders.push(order);
-      }
-    });
-    
-    setOrders(validOrders);
-    showSnackbar(`Removed ${duplicates.length} duplicate orders`, 'success');
+    // Fetch fresh data instead of filtering
+    fetchOrders();
   };
   
   const toggleDebugMode = async () => {
@@ -179,25 +176,29 @@ const OrdersScreen = ({ navigation }) => {
     return status || 'Unknown';
   };
   
-  // Filter orders based on selected mode
+  // Filter orders based on selected mode - web version approach
   const filteredOrders = React.useMemo(() => {
+    // First make a copy of all orders to prevent mutations
+    let visibleOrders = [...orders];
+    
+    // Web version approach: Only filter by status and search, not by order type
     switch (filterMode) {
       case 'active':
-        return orders.filter(order => {
+        return visibleOrders.filter(order => {
           const statusNum = typeof order.status === 'number' ? 
             order.status : 
             parseInt(order.status);
           return statusNum < 4; // Draft, Pending, Confirmed, Shipped
         });
       case 'completed':
-        return orders.filter(order => {
+        return visibleOrders.filter(order => {
           const statusNum = typeof order.status === 'number' ? 
             order.status : 
             parseInt(order.status);
           return statusNum === 4 || statusNum === 6; // Delivered or Completed
         });
       case 'cancelled':
-        return orders.filter(order => {
+        return visibleOrders.filter(order => {
           const statusNum = typeof order.status === 'number' ? 
             order.status : 
             parseInt(order.status);
@@ -205,7 +206,8 @@ const OrdersScreen = ({ navigation }) => {
         });
       case 'all':
       default:
-        return orders;
+        // Return all orders without any filtering
+        return visibleOrders;
     }
   }, [orders, filterMode]);
 
@@ -245,7 +247,7 @@ const OrdersScreen = ({ navigation }) => {
             <Menu.Item onPress={() => handleFilterChange('completed')} title="Completed Orders" />
             <Menu.Item onPress={() => handleFilterChange('cancelled')} title="Cancelled Orders" />
             <Divider />
-            <Menu.Item onPress={cleanupDuplicateOrders} title="Clean Duplicates" />
+            <Menu.Item onPress={cleanupDuplicateOrders} title="Refresh All" />
             <Menu.Item onPress={toggleDebugMode} title="Toggle Debug Mode" />
           </Menu>
           <Button 
@@ -262,15 +264,22 @@ const OrdersScreen = ({ navigation }) => {
       
       <FlatList
         data={filteredOrders}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <Card 
-            style={styles.orderCard} 
+            style={[
+              styles.orderCard, 
+              index % 2 === 0 ? styles.evenRow : styles.oddRow,
+              item.status === 5 || item.status === 'Cancelled' ? styles.cancelledOrder : null
+            ]} 
             onPress={() => navigation.navigate('OrderDetails', { orderId: item.id })}
             onLongPress={() => showDebugInfo(item)}
           >
             <Card.Content>
               <View style={styles.orderHeader}>
-                <Title style={styles.orderCustomer}>{item.customerName || 'Unknown Customer'}</Title>
+                <Title style={styles.orderNumber}>
+                  {/* Display order number like web version */}
+                  {item.orderNumber || `Order ${item.id}`}
+                </Title>
                 <View style={[
                   styles.statusBadge, 
                   getStatusStyle(item.status)
@@ -278,39 +287,70 @@ const OrdersScreen = ({ navigation }) => {
                   <Text style={styles.statusText}>{getStatusLabel(item.status)}</Text>
                 </View>
               </View>
-              <View style={styles.orderDetails}>
-                <Paragraph style={styles.orderNumber}>
-                  #{item.orderNumber || `Order ${item.id}`}
-                </Paragraph>
-                <Paragraph style={styles.orderDate}>
-                  Date: {item.orderDate ? new Date(item.orderDate).toLocaleDateString() : 'Unknown'}
-                </Paragraph>
-                <Paragraph style={styles.orderTotal}>
-                  ${(item.total || 0).toFixed(2)}
-                </Paragraph>
+              
+              <View style={styles.customerRow}>
+                <Text style={styles.customerLabel}>Customer:</Text>
+                <Text style={styles.customerName}>
+                  {/* Use comprehensive customer name fallbacks like web version */}
+                  {item.customerName || 
+                   (item.customer?.name) || 
+                   (item.customerId ? `Customer #${item.customerId}` : 'Unknown Customer')}
+                </Text>
+              </View>
+              
+              <Divider style={styles.divider} />
+              
+              <View style={styles.orderFooter}>
+                <View style={styles.orderDate}>
+                  <Text style={styles.dateLabel}>Date:</Text>
+                  <Text style={styles.dateValue}>
+                    {item.orderDate ? new Date(item.orderDate).toLocaleDateString() : 'Unknown'}
+                  </Text>
+                </View>
+                <View style={styles.orderTotal}>
+                  <Text style={styles.totalAmount}>
+                    {parseFloat(item.total || 0).toFixed(2)} {item.currency || 'USD'}
+                  </Text>
+                </View>
               </View>
             </Card.Content>
           </Card>
         )}
-        keyExtractor={item => String(item.id)}
+        keyExtractor={(item, index) => {
+          // Web version approach: First try to use ID
+          if (item.id) {
+            return `order-id-${String(item.id)}`;
+          }
+          // Then try to use the order number
+          if (item.orderNumber) {
+            return `order-num-${String(item.orderNumber)}`;
+          }
+          // Last resort: use index with timestamp for uniqueness
+          return `order-index-${index}-${Date.now()}`;
+        }}
         contentContainerStyle={styles.listContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#0284c7']}
+          />
         }
-        ListEmptyComponent={() => (
-          <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons name="clipboard-text-outline" size={60} color="#9ca3af" />
-            <Text style={styles.emptyText}>No orders found</Text>
-            <Button 
-              mode="contained"
-              onPress={() => navigation.navigate('NewOrder')}
-              style={styles.emptyButton}
-              color="#0284c7"
-            >
-              Create New Order
-            </Button>
-          </View>
-        )}
+        ListEmptyComponent={
+          loading ? null : (
+            <View style={styles.emptyContainer}>
+              <MaterialCommunityIcons name="package-variant" size={64} color="#9ca3af" />
+              <Text style={styles.emptyText}>No orders found</Text>
+              <Button 
+                mode="contained"
+                style={styles.emptyButton}
+                onPress={onRefresh}
+              >
+                Refresh
+              </Button>
+            </View>
+          )
+        }
       />
       <FAB
         style={styles.fab}
@@ -384,6 +424,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     paddingBottom: 8,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
   },
   filterText: {
     fontSize: 14,
@@ -406,22 +449,60 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb',
   },
   listContent: {
-    padding: 16,
+    padding: 8,
     paddingTop: 8,
+    backgroundColor: '#f3f4f6',
   },
   orderCard: {
-    marginBottom: 12,
+    marginBottom: 8,
     elevation: 2,
+    borderLeftWidth: 4,
+    borderLeftColor: '#0284c7',
+    borderRadius: 4,
+  },
+  evenRow: {
+    backgroundColor: '#ffffff',
+  },
+  oddRow: {
+    backgroundColor: '#f9fafb',
+  },
+  cancelledOrder: {
+    opacity: 0.8,
+    borderLeftColor: '#ef4444',
   },
   orderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 8,
   },
-  orderCustomer: {
+  orderNumber: {
     fontSize: 16,
     fontWeight: 'bold',
-    flex: 1, // Allow long customer names to shrink
+    flex: 1,
+    color: '#1f2937',
+  },
+  customerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  customerLabel: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginRight: 8,
+    fontWeight: '500',
+  },
+  customerName: {
+    fontSize: 15,
+    color: '#374151',
+    fontWeight: '500',
+    flex: 1,
+  },
+  divider: {
+    backgroundColor: '#e5e7eb',
+    height: 1,
+    marginVertical: 8,
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -445,23 +526,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
-  orderDetails: {
+  orderFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 8,
     alignItems: 'center',
   },
-  orderNumber: {
-    color: '#6b7280',
-    fontSize: 12,
-  },
   orderDate: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dateLabel: {
+    fontSize: 14,
     color: '#6b7280',
-    flex: 1,
-    marginLeft: 8,
+    marginRight: 4,
+  },
+  dateValue: {
+    fontSize: 14,
+    color: '#4b5563',
   },
   orderTotal: {
+    alignItems: 'flex-end',
+  },
+  totalAmount: {
+    fontSize: 16,
     fontWeight: 'bold',
+    color: '#0284c7',
   },
   fab: {
     position: 'absolute',
@@ -474,6 +563,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 32,
+    backgroundColor: '#ffffff',
+    margin: 16,
+    borderRadius: 8,
+    elevation: 2,
   },
   emptyText: {
     fontSize: 16,

@@ -1,6 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { BASE_URL } from '../config/constants';
 
 // Simple logger
 const logger = {
@@ -13,7 +14,7 @@ const logger = {
 // API configuration
 const API_CONFIG = {
   // Current API URL
-  URL: 'https://wren-integral-lionfish.ngrok-free.app/api',
+  URL: BASE_URL,
   
   // Request timeout in milliseconds (15 seconds)
   TIMEOUT: 15000,
@@ -38,97 +39,122 @@ const api = axios.create({
   }
 });
 
-// Request interceptor - adds auth token and logs requests
+// Log each request for debugging
 api.interceptors.request.use(
-  async (config) => {
-    try {
-      // Add token if available
-      const token = await AsyncStorage.getItem('token');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-      
-      // Log request details
-      logger.debug('API', `Request: ${config.method.toUpperCase()} ${config.url}`, {
+  config => {
+    console.log(
+      `API Request: ${config.method.toUpperCase()} ${config.url}`,
+      JSON.stringify({
         headers: config.headers,
-        data: config.data,
-        params: config.params
-      });
-      
-      return config;
-    } catch (error) {
-      logger.error('API', 'Error in request interceptor', error);
-      return Promise.reject(error);
-    }
+        data: config.data
+      }, null, 2)
+    );
+    
+    // Add request timestamp for tracking
+    config.metadata = { startTime: new Date().getTime() };
+    
+    // Log full URL for better debugging
+    console.log(`Full request URL: ${config.baseURL}${config.url}`);
+    
+    return config;
   },
-  (error) => {
-    logger.error('API', 'Request error in interceptor', error);
+  error => {
+    console.error('API Request Error:', error);
     return Promise.reject(error);
   }
 );
 
-// Response interceptor - handles auth errors and logs responses
+// Log each response for debugging
 api.interceptors.response.use(
-  (response) => {
-    // Log successful response (with truncated data to avoid excessive logging)
-    logger.debug('API', `Response: ${response.status} ${response.config.url}`, {
-      status: response.status,
-      statusText: response.statusText,
-      // Only log first 100 chars of response data if it's large
-      data: typeof response.data === 'string' && response.data.length > 100 
-        ? response.data.substring(0, 100) + '...' 
-        : response.data
-    });
+  response => {
+    // Calculate request duration
+    const endTime = new Date().getTime();
+    const startTime = response.config.metadata?.startTime || endTime;
+    const duration = endTime - startTime;
     
+    console.log(
+      `API Response (${duration}ms): ${response.status} ${response.config.method.toUpperCase()} ${response.config.url}`,
+      typeof response.data === 'object' ? JSON.stringify(response.data, null, 2).substring(0, 500) : 'Non-JSON response'
+    );
     return response;
   },
-  async (error) => {
-    const originalRequest = error.config;
+  error => {
+    // Calculate request duration even for errors
+    const endTime = new Date().getTime();
+    const startTime = error.config?.metadata?.startTime || endTime;
+    const duration = endTime - startTime;
     
-    // Log error details
     if (error.response) {
-      // Server responded with error status
-      logger.error('API', `Error Response: ${error.response.status} ${originalRequest?.url}`, {
-        status: error.response.status,
-        statusText: error.response.statusText,
-        data: error.response.data,
-        headers: originalRequest?.headers
-      });
+      console.error(
+        `API Error Response (${duration}ms): ${error.response.status} ${error.config?.method?.toUpperCase()} ${error.config?.url}`,
+        error.response.data
+      );
       
-      // Handle 401 Unauthorized errors
-      if (error.response.status === 401 && !originalRequest._retry) {
-        logger.warn('API', 'Authentication error - token expired or invalid');
-        
-        originalRequest._retry = true;
-        
-        try {
-          // Clear auth tokens
-          await AsyncStorage.removeItem('token');
-          await AsyncStorage.removeItem('user');
-          
-          // Log user logout
-          logger.info('API', 'User logged out due to auth error');
-        } catch (err) {
-          logger.error('API', 'Error during auth error handling', err);
-        }
+      // Enhanced error logging for specific status codes
+      if (error.response.status === 500) {
+        console.error('INTERNAL SERVER ERROR DETAILS:', {
+          url: error.config?.url,
+          method: error.config?.method,
+          requestData: error.config?.data,
+          responseData: error.response.data,
+          headers: error.response.headers
+        });
+      } else if (error.response.status === 400) {
+        console.error('BAD REQUEST DETAILS:', {
+          url: error.config?.url,
+          method: error.config?.method,
+          requestData: error.config?.data,
+          responseData: error.response.data,
+          validation: error.response.data.errors || error.response.data.validationErrors
+        });
+      } else if (error.response.status === 401) {
+        console.error('UNAUTHORIZED ACCESS:', {
+          url: error.config?.url,
+          token: error.config?.headers?.Authorization ? 'Present' : 'Missing'
+        });
       }
     } else if (error.request) {
-      // Request was made but no response received
-      logger.error('API', 'No response received', {
-        request: {
-          url: originalRequest?.url,
-          method: originalRequest?.method,
-        },
-        error: error.message
+      console.error(`API Request Failed (${duration}ms, No Response):`, {
+        url: error.config?.url,
+        method: error.config?.method,
+        requestData: error.config?.data,
+        error: error.message,
+        request: error.request._response || '[Request object]'
       });
     } else {
-      // Error in setting up the request
-      logger.error('API', 'Error setting up request', error.message);
+      console.error(`API Error (${duration}ms):`, {
+        message: error.message,
+        stack: error.stack
+      });
     }
-    
     return Promise.reject(error);
   }
 );
+
+// Add auth token from storage
+api.interceptors.request.use(
+  async config => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    } catch (error) {
+      console.error('Error setting auth token:', error);
+      return config;
+    }
+  },
+  error => {
+    return Promise.reject(error);
+  }
+);
+
+// Export the api client for use by other services
+export { api };
+
+// Also export as default for backward compatibility
+export default api;
 
 // Function to update the API base URL (useful for dynamic endpoints)
 export const updateApiBaseUrl = (newUrl) => {
@@ -1358,7 +1384,12 @@ export const orderService = {
   
   updateStatus: async (id, status) => {
     try {
-      const response = await api.put(`/Order/${id}/status`, { status });
+      // Convert status to numeric value if it's a string
+      const numericStatus = typeof status === 'string' && !isNaN(parseInt(status)) ? 
+                            parseInt(status) : 
+                            status;
+                            
+      const response = await api.put(`/Order/${id}/status`, { statusDto: { Status: numericStatus } });
       return {
         success: true,
         data: response.data
@@ -1602,6 +1633,3 @@ export const devPanelService = {
     }
   }
 };
-
-// Export the API instance
-export default api;

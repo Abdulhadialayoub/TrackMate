@@ -4,6 +4,7 @@ import { Text, Card, Title, Paragraph, Button, ActivityIndicator, Divider, Chip,
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { orderService } from '../../services';
 import { StatusBar } from 'expo-status-bar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const OrderDetailsScreen = ({ route, navigation }) => {
   const { orderId } = route.params;
@@ -20,23 +21,25 @@ const OrderDetailsScreen = ({ route, navigation }) => {
   const fetchOrderDetails = async () => {
     try {
       setLoading(true);
-      setError(null);
-      
       console.log('Fetching order details for ID:', orderId);
       
-      // Fetch real order data from API
       const result = await orderService.getById(orderId);
       
       if (result.success && result.data) {
-        console.log('Order details retrieved:', result.data);
-        
-        // Set the order with valid data
+        console.log('Order details retrieved successfully');
         setOrder(result.data);
         
-        // Calculate order total if needed
+        // Yüklenen sipariş verisinden company_id'yi saklayalım
+        if (result.data.companyId) {
+          const companyIdStr = String(result.data.companyId);
+          await AsyncStorage.setItem('company_id', companyIdStr);
+          console.log('Updated company_id from order details:', companyIdStr);
+        }
+        
+        // Calculate order total
         if (result.data.total !== undefined) {
           setOrderTotal(result.data.total);
-        } else if (result.data.items && result.data.items.length > 0) {
+        } else if (result.data.items && Array.isArray(result.data.items) && result.data.items.length > 0) {
           const total = result.data.items.reduce(
             (sum, item) => sum + (item.total || (item.quantity * (item.unitPrice || 0)) || 0), 
             0
@@ -44,14 +47,12 @@ const OrderDetailsScreen = ({ route, navigation }) => {
           setOrderTotal(total);
         }
       } else {
-        console.error('Error fetching order details:', result.message);
-        setError(result.message || 'Failed to load order details');
-        Alert.alert('Error', 'Failed to load order details');
+        console.error('Failed to get order details:', result.message);
+        setError(result.message || 'Failed to load order');
       }
-    } catch (error) {
-      console.error('Exception fetching order details:', error);
-      setError('Failed to load order details');
-      Alert.alert('Error', 'An error occurred while loading the order');
+    } catch (err) {
+      console.error('Error fetching order details:', err);
+      setError('Error loading order details');
     } finally {
       setLoading(false);
     }
@@ -61,7 +62,7 @@ const OrderDetailsScreen = ({ route, navigation }) => {
     try {
       setMenuVisible(false);
       
-      // Convert status label to numeric value if needed
+      // Ensure numeric status value
       let statusValue = newStatus;
       if (typeof newStatus === 'string') {
         switch (newStatus.toLowerCase()) {
@@ -74,8 +75,25 @@ const OrderDetailsScreen = ({ route, navigation }) => {
           case 'completed': statusValue = 6; break;
         }
       }
-      
-      const result = await orderService.updateStatus(orderId, statusValue);
+
+      // Create proper updateOrderDto structure
+      const updateOrderDto = {
+        id: orderId,
+        customerId: order.customerId,
+        orderDate: order.orderDate,
+        dueDate: order.dueDate,
+        status: statusValue, // Use numeric value
+        notes: order.notes,
+        shippingAddress: order.shippingAddress,
+        shippingMethod: order.shippingMethod,
+        shippingCost: order.shippingCost,
+        trackingNumber: order.trackingNumber,
+        currency: order.currency,
+        updatedBy: order.updatedBy,
+        items: order.items
+      };
+
+      const result = await orderService.update(orderId, updateOrderDto);
       
       if (result.success) {
         setOrder(result.data);
@@ -251,22 +269,30 @@ const OrderDetailsScreen = ({ route, navigation }) => {
           </View>
           
           {order.items && order.items.length > 0 ? (
-            order.items.map((item, index) => (
-              <View key={item.id || index}>
-                {index > 0 && <Divider style={styles.itemDivider} />}
-                <View style={styles.orderItem}>
-                  <View style={styles.itemDetails}>
-                    <Text style={styles.itemName}>{item.productName || item.name || 'Unnamed Product'}</Text>
-                    <Text style={styles.itemQuantity}>
-                      {item.quantity || 0} x ${((item.unitPrice || item.price || 0).toFixed(2))}
-                    </Text>
-                  </View>
-                  <Text style={styles.itemTotal}>
-                    ${((item.total || ((item.quantity || 0) * (item.unitPrice || item.price || 0))) || 0).toFixed(2)}
-                  </Text>
-                </View>
+            <>
+              <View style={styles.itemsHeaderRow}>
+                <Text style={styles.itemHeader}>Product</Text>
+                <Text style={styles.itemHeader}>Quantity</Text>
+                <Text style={styles.itemHeader}>Price</Text>
+                <Text style={styles.itemHeader}>Total</Text>
               </View>
-            ))
+              {order.items.map((item, index) => (
+                <View key={item.id || index}>
+                  {index > 0 && <Divider style={styles.itemDivider} />}
+                  <View style={styles.orderItem}>
+                    <View style={styles.itemDetails}>
+                      <Text style={styles.itemName}>{item.productName || item.name || 'Unnamed Product'}</Text>
+                      <Text style={styles.itemQuantity}>{item.quantity || 0}</Text>
+                      <Text style={styles.itemPrice}>${(item.unitPrice || item.price || 0).toFixed(2)}</Text>
+                      <Text style={styles.itemTotal}>
+                        ${((item.total || ((item.quantity || 0) * (item.unitPrice || item.price || 0))) || 0).toFixed(2)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ))
+            }
+            </>
           ) : (
             <Paragraph style={styles.noItemsText}>No items in this order</Paragraph>
           )}
@@ -276,17 +302,17 @@ const OrderDetailsScreen = ({ route, navigation }) => {
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Subtotal</Text>
             <Text style={styles.totalAmount}>
-              ${((order.subtotal || orderTotal) || 0).toFixed(2)}
+              ${((order.subtotal || order.subTotal || orderTotal) || 0).toFixed(2)}
             </Text>
           </View>
           
-          {(order.taxRate > 0 || order.tax > 0) && (
+          {(order.taxRate > 0 || order.tax > 0 || order.taxAmount > 0) && (
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>
                 Tax {order.taxRate > 0 ? `(${order.taxRate}%)` : ''}
               </Text>
               <Text style={styles.totalAmount}>
-                ${((order.tax || ((orderTotal * (order.taxRate || 0)) / 100)) || 0).toFixed(2)}
+                ${((order.tax || order.taxAmount || ((orderTotal * (order.taxRate || 0)) / 100)) || 0).toFixed(2)}
               </Text>
             </View>
           )}
@@ -301,14 +327,14 @@ const OrderDetailsScreen = ({ route, navigation }) => {
           {(order.discount > 0) && (
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Discount</Text>
-              <Text style={styles.totalAmount}>-${(order.discount || 0).toFixed(2)}</Text>
+              <Text style={[styles.totalAmount, styles.discountText]}>-${(order.discount || 0).toFixed(2)}</Text>
             </View>
           )}
           
           <View style={[styles.totalRow, styles.grandTotalRow]}>
             <Text style={styles.grandTotalLabel}>Total</Text>
             <Text style={styles.grandTotalAmount}>
-              ${((order.total || orderTotal) || 0).toFixed(2)}
+              ${((order.total || order.totalAmount || orderTotal) || 0).toFixed(2)} {order.currency || 'USD'}
             </Text>
           </View>
         </Card.Content>
@@ -356,8 +382,14 @@ const OrderDetailsScreen = ({ route, navigation }) => {
           onPress={() => Alert.alert('Generate Invoice', 'Would you like to create an invoice for this order?', [
             { text: 'Cancel', style: 'cancel' },
             { 
-              text: 'Create Invoice', 
-              onPress: () => navigation.navigate('NewInvoice', { orderId: orderId })
+              text: 'Create Invoice',
+              onPress: () => navigation.navigate('CommonScreens', {
+                screen: 'InvoiceDetails',
+                params: {
+                  orderId: orderId,
+                  createFromOrder: true
+                }
+              })
             }
           ])}
           style={styles.actionButton}
@@ -462,58 +494,72 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   orderItem: {
+    flexDirection: 'column',
+    marginBottom: 8,
+  },
+  itemDetails: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 4,
-  },
-  itemDetails: {
-    flex: 1,
   },
   itemName: {
-    fontSize: 14,
+    flex: 2,
     fontWeight: '500',
+    fontSize: 14,
   },
   itemQuantity: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 2,
+    flex: 0.5,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  itemPrice: {
+    flex: 0.8,
+    fontSize: 14,
+    textAlign: 'right',
   },
   itemTotal: {
+    flex: 0.8,
     fontWeight: 'bold',
+    textAlign: 'right',
+    fontSize: 14,
   },
   totalDivider: {
     marginTop: 16,
-    marginBottom: 8,
-  },
-  subtotalDivider: {
-    marginVertical: 8,
+    marginBottom: 16,
+    height: 1,
+    backgroundColor: '#0284c7',
   },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 4,
+    marginBottom: 8,
   },
   totalLabel: {
-    color: '#6b7280',
+    fontSize: 14,
+    color: '#4b5563',
   },
   totalAmount: {
+    fontSize: 14,
     fontWeight: '500',
   },
-  discountText: {
-    color: '#10b981',
+  grandTotalRow: {
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    marginTop: 8,
   },
   grandTotalLabel: {
-    fontWeight: 'bold',
     fontSize: 16,
-  },
-  grandTotalAmount: {
     fontWeight: 'bold',
-    fontSize: 16,
     color: '#0284c7',
   },
-  grandTotalRow: {
-    marginTop: 8,
+  grandTotalAmount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#0284c7',
+  },
+  discountText: {
+    color: '#ef4444',
   },
   paymentInfo: {
     marginTop: 8,
@@ -531,6 +577,19 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     textAlign: 'center',
     padding: 16,
+  },
+  itemsHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    marginBottom: 8,
+  },
+  itemHeader: {
+    fontWeight: 'bold',
+    color: '#6b7280',
+    fontSize: 12,
   },
 });
 

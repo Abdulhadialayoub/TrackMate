@@ -1,24 +1,91 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Linking, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, Linking, Platform, Alert } from 'react-native';
 import { Text, Card, Title, Paragraph, Button, Divider, List, ActivityIndicator, Chip } from 'react-native-paper';
-import { invoiceService } from '../../services';
+import { invoiceService, orderService } from '../../services';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const InvoiceDetailsScreen = ({ route, navigation }) => {
-  const { invoiceId } = route.params;
+  const { invoiceId, orderId, createFromOrder } = route.params;
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [creatingInvoice, setCreatingInvoice] = useState(false);
 
   useEffect(() => {
-    fetchInvoice();
-  }, []);
+    if (createFromOrder && orderId) {
+      createInvoiceFromOrder();
+    } else if (invoiceId) {
+      fetchInvoice();
+    } else {
+      setError('No invoice ID or order data provided');
+      setLoading(false);
+    }
+  }, [invoiceId, orderId, createFromOrder]);
 
-  const fetchInvoice = async () => {
+  const createInvoiceFromOrder = async () => {
+    try {
+      setCreatingInvoice(true);
+      setLoading(true);
+      
+      // 1. Get order details
+      const orderData = await orderService.getById(orderId);
+      if (!orderData) {
+        throw new Error('Order not found');
+      }
+      
+      // 2. Create a new invoice from order data
+      const invoiceData = {
+        orderId: orderId,
+        customerId: orderData.customerId,
+        customerName: orderData.customerName || 'Unknown Customer',
+        billingAddress: orderData.shippingAddress || '',
+        customerEmail: orderData.customer?.email || '',
+        customerPhone: orderData.customer?.phone || '',
+        invoiceDate: new Date().toISOString(),
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Due in 30 days
+        subtotal: orderData.subTotal || 0,
+        taxRate: orderData.taxRate || 0,
+        taxAmount: orderData.taxAmount || 0,
+        total: orderData.total || 0,
+        status: 0, // Draft status
+        notes: `Generated from Order ${orderData.orderNumber}`,
+        invoiceItems: (orderData.items || []).map(item => ({
+          productId: item.productId,
+          productName: item.productName || 'Unknown Product',
+          description: item.description || '',
+          quantity: item.quantity || 0,
+          unitPrice: item.unitPrice || 0,
+          discount: item.discount || 0,
+          total: item.total || 0
+        }))
+      };
+      
+      // 3. Save the invoice
+      const result = await invoiceService.create(invoiceData);
+      
+      if (result && result.id) {
+        Alert.alert(
+          'Success',
+          'Invoice created successfully',
+          [{ text: 'OK', onPress: () => fetchInvoice(result.id) }]
+        );
+      } else {
+        throw new Error('Failed to create invoice');
+      }
+    } catch (error) {
+      console.error('Error creating invoice from order:', error);
+      setError(`Failed to create invoice: ${error.message}`);
+      setLoading(false);
+    } finally {
+      setCreatingInvoice(false);
+    }
+  };
+
+  const fetchInvoice = async (id = invoiceId) => {
     try {
       setLoading(true);
-      const data = await invoiceService.getById(invoiceId);
+      const data = await invoiceService.getById(id);
       console.log('Invoice data:', data);
       setInvoice(data);
       setError(null);
@@ -100,7 +167,9 @@ const InvoiceDetailsScreen = ({ route, navigation }) => {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#0284c7" />
-        <Text style={{ marginTop: 10 }}>Loading invoice details...</Text>
+        <Text style={{ marginTop: 10 }}>
+          {creatingInvoice ? 'Creating invoice from order...' : 'Loading invoice details...'}
+        </Text>
       </View>
     );
   }

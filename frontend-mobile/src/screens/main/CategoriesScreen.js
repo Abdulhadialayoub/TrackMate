@@ -38,10 +38,7 @@ const CategoriesScreen = ({ navigation }) => {
       // Extract data from result
       const categoriesData = result.success ? result.data : [];
       
-      console.log(`Retrieved ${categoriesData?.length || 0} categories`);
-      setCategories(Array.isArray(categoriesData) ? categoriesData : []);
-      
-      // Show error if request failed
+      conso // Show error if request failed
       if (!result.success) {
         showSnackbar(`Error fetching categories: ${result.message}`, 'error');
       }
