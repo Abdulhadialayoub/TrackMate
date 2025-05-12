@@ -382,7 +382,38 @@ const RoleManager = () => {
         // Öncelikle API'dan çekmeyi dene
         const response = await api.get('/User', { timeout: 5000 });
         console.log('Users API response in RoleManager:', response.data);
-        setUsers(response.data || []);
+        
+        // Handle API response safely - extract users array from response data
+        // Handle cases where response.data might be an object with nested arrays like {$values: [...]}
+        let userData;
+        if (response.data && typeof response.data === 'object') {
+          // Check if data has $values property (common in .NET API responses)
+          if (Array.isArray(response.data.$values)) {
+            userData = response.data.$values;
+          } 
+          // Check if data itself is an array
+          else if (Array.isArray(response.data)) {
+            userData = response.data;
+          }
+          // Check if data is a simple object with users property
+          else if (response.data.users && Array.isArray(response.data.users)) {
+            userData = response.data.users;
+          }
+          // Last resort - try to extract any array properties
+          else {
+            const possibleArrays = Object.values(response.data).filter(val => Array.isArray(val));
+            if (possibleArrays.length > 0) {
+              userData = possibleArrays[0];
+            } else {
+              userData = [];
+            }
+          }
+        } else {
+          userData = [];
+        }
+        
+        console.log('Processed users data in RoleManager:', userData);
+        setUsers(userData);
       } catch (error) {
         console.error('Error from API, using mock data instead');
         // API başarısız olursa mock veri kullan
@@ -537,14 +568,18 @@ const RoleManager = () => {
       }
       
       // Her durumda yerel verileri güncelle
-      setUsers(users.map(u => {
-        if (u.id === user.id) {
-          const updatedUser = { ...u, role };
-          console.log('Updated user in local state:', updatedUser);
-          return updatedUser;
-        }
-        return u;
-      }));
+      if (Array.isArray(users)) {
+        setUsers(users.map(u => {
+          if (u.id === user.id) {
+            const updatedUser = { ...u, role };
+            console.log('Updated user in local state:', updatedUser);
+            return updatedUser;
+          }
+          return u;
+        }));
+      } else {
+        console.warn('Cannot update local users state - users is not an array');
+      }
       
       // Close the dialog
       setEditUserRoleDialog({
@@ -700,21 +735,21 @@ const RoleManager = () => {
                   <TableRow>
                     <TableCell colSpan={7} align="center">Loading users...</TableCell>
                   </TableRow>
-                ) : users.length === 0 ? (
+                ) : !Array.isArray(users) || users.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} align="center">No users found</TableCell>
                   </TableRow>
                 ) : (
                   <>
                     {console.log('Rendering users in table:', users)}
-                    {users.map(user => (
+                    {Array.isArray(users) && users.map(user => (
                       <TableRow key={user.id}>
                         <TableCell>{user.id}</TableCell>
-                        <TableCell>{`${user.firstName} ${user.lastName}`}</TableCell>
+                        <TableCell>{`${user.firstName || ''} ${user.lastName || ''}`}</TableCell>
                         <TableCell>{user.email}</TableCell>
                         <TableCell>
                           <Chip 
-                            label={user.role} 
+                            label={user.role || 'Unknown'} 
                             color={
                               user.role === 'Admin' ? 'error' :
                               user.role === 'Manager' ? 'warning' :

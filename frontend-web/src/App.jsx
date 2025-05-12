@@ -19,6 +19,7 @@ import Products from './components/Products';
 import Customers from './components/Customers';
 import Orders from './components/Orders';
 import Invoices from './components/Invoices';
+import Messages from './components/Messages';
 import UserProfile from './components/UserProfile';
 import Settings from './components/Settings';
 import { AppProvider, useAppContext } from './context/AppContext';
@@ -182,6 +183,7 @@ function App() {
               <Route path="/customers" element={<Customers />} />
               <Route path="/orders" element={<Orders />} />
               <Route path="/invoices" element={<Invoices />} />
+              <Route path="/messages" element={<Messages />} />
               <Route path="/profile" element={<UserProfile />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/categories" element={<Categories />} />

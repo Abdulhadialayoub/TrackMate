@@ -191,9 +191,12 @@ const Dashboard = () => {
           const processedOrders = ordersResult.data.map(order => {
             // Make sure order has a status
             let status = order.status;
-            if (typeof status === 'number') {
+            
+            // Handle both number and string status formats
+            if (typeof status === 'number' || (typeof status === 'string' && !isNaN(parseInt(status)))) {
               // Convert numeric status to string status
-              switch(status) {
+              const statusNumber = typeof status === 'number' ? status : parseInt(status);
+              switch(statusNumber) {
                 case 0: status = 'Draft'; break;
                 case 1: status = 'Pending'; break;
                 case 2: status = 'Confirmed'; break;
@@ -212,7 +215,7 @@ const Dashboard = () => {
               customerName: order.customerName || order.customer?.name || 'Unknown Customer',
               // Ensure total is calculated correctly
               total: order.total || order.totalAmount || 
-                    (order.subTotal + order.taxAmount + order.shippingCost) || 0
+                    (order.subTotal + (order.taxAmount || 0) + (order.shippingCost || 0)) || 0
             };
           });
           

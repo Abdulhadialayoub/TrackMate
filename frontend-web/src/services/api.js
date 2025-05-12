@@ -47,23 +47,130 @@ export const normalizeJsonResponse = (data) => {
   // If it's not an object, return as is
   if (typeof data !== 'object') return data;
   
-  // Check for $values property (array in ReferenceHandler.Preserve format)
-  if (data.$values && Array.isArray(data.$values)) {
-    console.log('Normalizing $values array with', data.$values.length, 'items');
-    return data.$values.map(item => normalizeJsonResponse(item));
-  }
+  // Track objects by $id to resolve references
+  const objectsById = new Map();
   
-  // If it's a regular object, normalize each property
-  const result = {};
-  for (const key in data) {
-    // Skip $id and $ref properties as they're ReferenceHandler.Preserve metadata
-    if (key === '$id' || key === '$ref') continue;
+  // First pass: collect all objects with $id
+  const collectObjectsById = (obj) => {
+    if (obj == null || typeof obj !== 'object') return;
     
-    // Recursively normalize nested objects
-    result[key] = normalizeJsonResponse(data[key]);
-  }
+    // Store object by its $id if it has one
+    if (obj.$id && typeof obj.$id === 'string') {
+      objectsById.set(obj.$id, obj);
+    }
+    
+    // Process arrays
+    if (Array.isArray(obj)) {
+      obj.forEach(item => collectObjectsById(item));
+      return;
+    }
+    
+    // Process object properties
+    for (const key in obj) {
+      if (key !== '$ref' && typeof obj[key] === 'object' && obj[key] !== null) {
+        collectObjectsById(obj[key]);
+      }
+    }
+  };
   
-  return result;
+  // Process an object, resolving references and removing circular references
+  const processObject = (obj, objectsById, visited = new Set()) => {
+    // Handle null/undefined
+    if (obj == null) return obj;
+    
+    // Handle primitive values
+    if (typeof obj !== 'object') return obj;
+    
+    // Prevent circular references
+    if (visited.has(obj)) {
+      return { __circular: true };
+    }
+    
+    // Mark this object as visited
+    visited.add(obj);
+    
+    // Handle $ref references
+    if (obj.$ref && typeof obj.$ref === 'string') {
+      const referenced = objectsById.get(obj.$ref);
+      if (referenced) {
+        // Process the referenced object with a new visited set to avoid interference
+        const processedRef = processObject(referenced, objectsById, new Set([...visited]));
+        
+        // Special handling for customer references
+        if (processedRef && obj.$ref.includes('Customer')) {
+          // Ensure customer name is available
+          if (!processedRef.name && !processedRef.Name) {
+            processedRef.name = "Unknown Customer";
+          }
+        }
+        
+        return processedRef;
+      }
+      return {}; // Referenced object not found
+    }
+    
+    // Handle arrays
+    if (Array.isArray(obj)) {
+      return obj.map(item => processObject(item, objectsById, new Set([...visited])));
+    }
+    
+    // Handle regular objects
+    const result = {};
+    for (const key in obj) {
+      // Skip special properties used for reference tracking
+      if (key === '$id' || key === '$ref') continue;
+      
+      // Handle $values array - return its contents processed directly
+      if (key === '$values' && Array.isArray(obj.$values)) {
+        result[key] = obj.$values.map(item => processObject(item, objectsById, new Set([...visited])));
+        continue;
+      }
+      
+      // Process nested properties
+      result[key] = processObject(obj[key], objectsById, new Set([...visited]));
+    }
+    
+    // Special handling for customer/order objects
+    if (result.customerId && !result.customerName && !result.customer) {
+      // Add a minimal customer object if missing
+      result.customerName = `Customer #${result.customerId}`;
+    }
+    
+    return result;
+  };
+  
+  try {
+    // Collect all objects with $id references first
+    collectObjectsById(data);
+    
+    // If the object has $values property (common in ASP.NET Core)
+    if (data.$values && Array.isArray(data.$values)) {
+      console.log('Found $values array with', data.$values.length, 'items');
+      
+      // Process and return the array
+      return data.$values.map(item => processObject(item, objectsById));
+    }
+    
+    // Handle case where we have an object with a single property called 'data'
+    if (data.data && (Array.isArray(data.data) || typeof data.data === 'object') 
+        && Object.keys(data).length === 1) {
+      console.log('Unwrapping data property with direct access');
+      return processObject(data.data, objectsById);
+    }
+    
+    // For regular objects
+    return processObject(data, objectsById);
+  } catch (error) {
+    console.error('Error normalizing JSON response:', error);
+    
+    // Fallback: try simpler approach - just extract $values if present
+    if (data.$values && Array.isArray(data.$values)) {
+      return data.$values;
+    }
+    
+    // If all else fails, return the original data
+    return data;
+  }
 };
 
 // Create axios instance with base URL
@@ -139,14 +246,58 @@ api.interceptors.response.use(
       try {
         // Only apply normalization for successful responses
         if (response.status >= 200 && response.status < 300) {
-          const normalizedData = normalizeJsonResponse(response.data);
-          if (normalizedData !== response.data) {
-            console.log('Normalized response data for', response.config.url);
-            response.data = normalizedData;
+          // Add some safety checks
+          if (response.data && typeof response.data === 'object') {
+            // Check if we need normalization (has special properties)
+            const hasReferenceFormat = response.data.$values || response.data.$id || 
+              Object.values(response.data).some(v => v && typeof v === 'object' && v.$ref);
+              
+            if (hasReferenceFormat) {
+              console.log('Detected circular reference format, normalizing data for', response.config.url);
+              try {
+                const normalizedData = normalizeJsonResponse(response.data);
+                if (normalizedData !== response.data) {
+                  console.log('Successfully normalized response data');
+                  response.data = normalizedData;
+                }
+              } catch (normalizationError) {
+                console.error('Error normalizing response data:', normalizationError);
+                
+                // Use simplified approach when main approach fails
+                console.warn('Falling back to simple JSON sanitization');
+                try {
+                  // Try to sanitize using simpler approach - stringify and parse with circular reference handling
+                  const simplifiedData = JSON.parse(
+                    JSON.stringify(response.data, (key, value) => {
+                      // Skip special properties
+                      if (key === '$id' || key === '$ref') return undefined;
+                      
+                      // Handle $values array - return its contents directly
+                      if (key === '$values' && Array.isArray(value)) return value;
+                      
+                      return value;
+                    })
+                  );
+                  
+                  // If we have a $values property at the top level, use that as the data
+                  if (simplifiedData && simplifiedData.$values && Array.isArray(simplifiedData.$values)) {
+                    response.data = simplifiedData.$values;
+                  } else {
+                    response.data = simplifiedData;
+                  }
+                  
+                  console.log('Successfully sanitized data using simplified approach');
+                } catch (fallbackError) {
+                  console.error('Even fallback sanitization failed:', fallbackError);
+                  // Keep the original data if all else fails
+                }
+              }
+            }
           }
         }
       } catch (error) {
-        console.error('Error normalizing response data:', error);
+        console.error('Error in response interceptor while normalizing data:', error);
+        // Continue with the original data to prevent API failures
       }
     }
     

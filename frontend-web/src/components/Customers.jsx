@@ -26,7 +26,8 @@ import {
   Snackbar,
   InputAdornment,
   Tabs,
-  Tab
+  Tab,
+  TableFooter
 } from '@mui/material';
 import { 
   Add as AddIcon, 
@@ -41,6 +42,7 @@ import {
   ShoppingCart as OrderIcon
 } from '@mui/icons-material';
 import { customerService } from '../services/customerService';
+import { useNavigate } from 'react-router-dom';
 
 const initialFormState = {
   name: '',
@@ -101,6 +103,7 @@ function TabPanel(props) {
 }
 
 const Customers = () => {
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -428,7 +431,7 @@ const Customers = () => {
         <Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h4" component="h1" gutterBottom>
-              {selectedCustomer.name}
+              {selectedCustomer.name || `Customer #${selectedCustomer.id}` || 'Customer Details'}
             </Typography>
             <Button 
               variant="outlined" 
@@ -511,10 +514,15 @@ const Customers = () => {
                     </TableHead>
                     <TableBody>
                       {customerOrders.map((order) => (
-                        <TableRow key={order.id}>
+                        <TableRow 
+                          key={order.id} 
+                          hover
+                          sx={{ cursor: 'pointer' }}
+                          onClick={() => navigate(`/orders?selected=${order.id}`)}
+                        >
                           <TableCell>{order.orderNumber}</TableCell>
                           <TableCell>{new Date(order.orderDate).toLocaleDateString()}</TableCell>
-                          <TableCell>{(order.total || 0).toFixed(2)} {order.currency || 'USD'}</TableCell>
+                          <TableCell>{(order.total || order.totalAmount || 0).toFixed(2)} {order.currency || 'USD'}</TableCell>
                           <TableCell>
                             <Chip 
                               label={orderStatuses.find(s => s.value === order.status)?.label || 'Unknown'} 
@@ -525,6 +533,17 @@ const Customers = () => {
                         </TableRow>
                       ))}
                     </TableBody>
+                    {customerOrders.length > 0 && (
+                      <TableFooter>
+                        <TableRow>
+                          <TableCell colSpan={2} align="right" sx={{ fontWeight: 'bold' }}>Grand Total:</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold' }}>
+                            {customerOrders.reduce((sum, order) => sum + (order.total || order.totalAmount || 0), 0).toFixed(2)} {customerOrders[0]?.currency || 'USD'}
+                          </TableCell>
+                          <TableCell></TableCell>
+                        </TableRow>
+                      </TableFooter>
+                    )}
                   </Table>
                 </TableContainer>
               )}
@@ -551,7 +570,12 @@ const Customers = () => {
                     </TableHead>
                     <TableBody>
                       {customerInvoices.map((invoice) => (
-                        <TableRow key={invoice.id}>
+                        <TableRow 
+                          key={invoice.id}
+                          hover
+                          sx={{ cursor: 'pointer' }}
+                          onClick={() => navigate(`/invoices?selected=${invoice.id}`)}
+                        >
                           <TableCell>{invoice.invoiceNumber}</TableCell>
                           <TableCell>{new Date(invoice.invoiceDate).toLocaleDateString()}</TableCell>
                           <TableCell>{new Date(invoice.dueDate).toLocaleDateString()}</TableCell>

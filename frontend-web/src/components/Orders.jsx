@@ -51,6 +51,7 @@ import { orderService } from '../services/orderService';
 import { customerService } from '../services/customerService';
 import { productService } from '../services/productService';
 import { invoiceService } from '../services/invoiceService';
+import { dashboardService } from '../services/dashboardService';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const orderStatuses = [
@@ -134,6 +135,7 @@ const Orders = () => {
   const [openRemoveItemDialog, setOpenRemoveItemDialog] = useState(false);
   const [openInvoiceDialog, setOpenInvoiceDialog] = useState(false);
   const [orderForInvoice, setOrderForInvoice] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all');
 
   // Initial state for the form data
   const initialFormState = {
@@ -212,11 +214,12 @@ const Orders = () => {
     fetchProducts();
   }, []);
 
-  // Add a new effect to check for refresh parameter in URL
+  // Add a new effect to check for refresh parameter or selected order in URL
   useEffect(() => {
     // Check if the URL has a refresh parameter
     const searchParams = new URLSearchParams(location.search);
     const shouldRefresh = searchParams.get('refresh') === 'true';
+    const selectedOrderId = searchParams.get('selected');
     
     if (shouldRefresh) {
       console.log('Refresh parameter detected in URL, refreshing orders...');
@@ -226,9 +229,47 @@ const Orders = () => {
       const newUrl = window.location.pathname;
       window.history.replaceState({}, '', newUrl);
     }
-  }, [location.search]);
+    
+    // If there's a selected order ID in the URL, fetch and select that order
+    if (selectedOrderId && orders.length > 0) {
+      console.log('Selected order ID found in URL:', selectedOrderId);
+      const order = orders.find(o => o.id.toString() === selectedOrderId.toString());
+      
+      if (order) {
+        console.log('Found matching order, selecting it');
+        handleOrderSelect(order);
+      } else {
+        console.log('Order not found in current list, fetching it directly');
+        // Order not found in current list, fetch it directly
+        const fetchSelectedOrder = async () => {
+          try {
+            const result = await orderService.getById(selectedOrderId);
+            if (result.success && result.data) {
+              handleOrderSelect(result.data);
+            } else {
+              showSnackbar('Failed to load selected order', 'error');
+            }
+          } catch (err) {
+            console.error('Error fetching selected order:', err);
+            showSnackbar('Error loading selected order', 'error');
+          }
+        };
+        
+        fetchSelectedOrder();
+      }
+      
+      // Clear the selected parameter from URL
+      const clearedParams = new URLSearchParams(location.search);
+      clearedParams.delete('selected');
+      window.history.replaceState(
+        {},
+        '',
+        clearedParams.toString() ? `?${clearedParams.toString()}` : window.location.pathname
+      );
+    }
+  }, [location.search, orders]);
 
-  // Update fetchOrders to better handle customer data
+  // Update fetchOrders to better handle complex JSON with circular references
   const fetchOrders = async () => {
     setLoading(true);
     showSnackbar('Refreshing orders list...', 'info');
@@ -262,71 +303,118 @@ const Orders = () => {
       if (result.success) {
         console.log('Orders fetched:', result.data);
         
-        // Add debug logging to see if we're getting all orders
-        if (Array.isArray(result.data)) {
-          console.log(`Received ${result.data.length} orders from API`);
-          // Log the first 5 order IDs to help with debugging
-          const orderIds = result.data.slice(0, 5).map(o => o.id || 'no-id').join(', ');
-          console.log(`First few order IDs: ${orderIds}`);
-        } else {
-          console.warn('Orders data is not an array:', result.data);
-        }
+        // Check if we have a complex JSON structure with $values property
+        const ordersData = result.data && result.data.$values 
+          ? result.data.$values 
+          : Array.isArray(result.data) 
+            ? result.data 
+            : [];
         
-        // Process the orders to ensure all required properties are set with valid values
-        const processedOrders = (Array.isArray(result.data) ? result.data : []).map(order => {
-          // Create a copy to avoid modifying the original
-          const processedOrder = { ...order };
+        console.log(`Received ${ordersData.length} orders from API`);
+        
+        // Process the orders to handle complex JSON structure with circular references
+        const processedOrders = ordersData.map(order => {
+          // Create a clean order object without circular references
           
-          // Check if order has an ID
-          if (!processedOrder.id) {
-            console.warn('Found order without ID:', processedOrder);
-            // Generate a temporary ID if needed
-            processedOrder.id = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+          // First, extract the customer name with a more robust approach
+          const customerName = order.customerName || 
+                              (order.customer && typeof order.customer === 'object' ? order.customer.name : null) || 
+                              (order.customerId ? `Customer #${order.customerId}` : 'Unknown Customer');
+          
+          const cleanOrder = {
+            id: order.id || `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            companyId: order.companyId,
+            customerId: order.customerId,
+            orderNumber: order.orderNumber,
+            orderDate: order.orderDate,
+            dueDate: order.dueDate,
+            status: order.status,
+            notes: order.notes,
+            currency: order.currency,
+            shippingAddress: order.shippingAddress,
+            shippingMethod: order.shippingMethod,
+            trackingNumber: order.trackingNumber,
+            shippingCost: parseFloat(order.shippingCost || 0),
+            taxRate: parseFloat(order.taxRate || 0),
+            taxAmount: parseFloat(order.taxAmount || 0),
+            subTotal: parseFloat(order.subTotal || 0),
+            totalAmount: parseFloat(order.totalAmount || 0),
+            total: parseFloat(order.totalAmount || order.total || 0),
+            customerName: customerName // Use the reliably extracted customer name
+          };
+          
+          // Handle order items properly
+          const items = [];
+          if (order.items && order.items.$values && Array.isArray(order.items.$values)) {
+            // Process items with $values structure
+            items.push(...order.items.$values.map(item => ({
+              id: item.id,
+              productId: item.productId,
+              productName: item.product ? item.product.name : 'Unknown Product',
+              quantity: parseFloat(item.quantity) || 0,
+              unitPrice: parseFloat(item.unitPrice || 0),
+              discount: parseFloat(item.discount || 0),
+              totalAmount: parseFloat(item.totalAmount || 0),
+              total: parseFloat(item.totalAmount || item.total || 0)
+            })));
+          } else if (order.items && Array.isArray(order.items)) {
+            // Process items as regular array
+            items.push(...order.items.map(item => ({
+              id: item.id,
+              productId: item.productId,
+              productName: item.productName || (item.product ? item.product.name : 'Unknown Product'),
+              quantity: parseFloat(item.quantity) || 0,
+              unitPrice: parseFloat(item.unitPrice || 0),
+              discount: parseFloat(item.discount || 0),
+              totalAmount: parseFloat(item.totalAmount || 0),
+              total: parseFloat(item.totalAmount || item.total || 0)
+            })));
+          } else if (order.orderItems) {
+            // Handle if items are in orderItems property
+            const orderItems = Array.isArray(order.orderItems) 
+              ? order.orderItems 
+              : (order.orderItems.$values || []);
+              
+            items.push(...orderItems.map(item => ({
+              id: item.id,
+              productId: item.productId,
+              productName: item.productName || (item.product ? item.product.name : 'Unknown Product'),
+              quantity: parseFloat(item.quantity) || 0,
+              unitPrice: parseFloat(item.unitPrice || 0),
+              discount: parseFloat(item.discount || 0),
+              totalAmount: parseFloat(item.totalAmount || 0),
+              total: parseFloat(item.totalAmount || item.total || 0)
+            })));
           }
           
-          // Make sure status is set
-          if (processedOrder.status === undefined || processedOrder.status === null) {
-            console.warn(`Order ${processedOrder.id} has no status, defaulting to Draft`, processedOrder);
-            processedOrder.status = 0; // Default to Draft
+          cleanOrder.items = items;
+          
+          // Store the complete customer object if available, or create a minimal one
+          if (order.customer && typeof order.customer === 'object') {
+            cleanOrder.customer = {
+              id: order.customer.id,
+              name: order.customer.name || customerName, // Ensure name is available
+              email: order.customer.email,
+              phone: order.customer.phone,
+              address: order.customer.address
+            };
+          } else if (order.customerId) {
+            // If we have a customer ID but no customer object, create a minimal one
+            cleanOrder.customer = {
+              id: order.customerId,
+              name: customerName
+            };
+          } else {
+            // Ensure there's always at least a minimal customer object
+            cleanOrder.customer = {
+              id: 0,
+              name: 'Unknown Customer'
+            };
           }
           
-          // Ensure customer data is available
-          if (!processedOrder.customerName && processedOrder.customer?.name) {
-            processedOrder.customerName = processedOrder.customer.name;
-          } else if (!processedOrder.customerName && !processedOrder.customer?.name) {
-            // Look up the customer name in our customers list if possible
-            const customerMatch = customers.find(c => c.id === processedOrder.customerId);
-            if (customerMatch) {
-              processedOrder.customerName = customerMatch.name;
-              console.log(`Found customer name '${customerMatch.name}' for order ${processedOrder.id} with customerId ${processedOrder.customerId}`);
-            } else {
-              console.warn(`Order ${processedOrder.id} has no customer information`, processedOrder);
-              processedOrder.customerName = processedOrder.customerId ? `Customer #${processedOrder.customerId}` : 'Unknown Customer';
-            }
-          }
-          
-          // Ensure date is valid
-          if (!processedOrder.orderDate) {
-            console.warn(`Order ${processedOrder.id} has no date, defaulting to today`, processedOrder);
-            processedOrder.orderDate = new Date().toISOString().split('T')[0];
-          }
-          
-          // Ensure order number is valid
-          if (!processedOrder.orderNumber) {
-            console.warn(`Order ${processedOrder.id} has no order number, generating one`, processedOrder);
-            processedOrder.orderNumber = `ORD-${processedOrder.customerId || 'CUST'}-${Date.now().toString().slice(-4)}`;
-          }
-          
-          // Ensure total is calculated
-          if (processedOrder.total === undefined || processedOrder.total === null) {
-            console.warn(`Order ${processedOrder.id} has no total, calculated as 0`, processedOrder);
-            processedOrder.total = processedOrder.totalAmount || 0;
-          }
-          
-          return processedOrder;
+          return cleanOrder;
         });
         
-        // Set the processed orders
         setOrders(processedOrders);
         setLoading(false);
       } else {
@@ -477,18 +565,33 @@ const Orders = () => {
     });
     
     // Ensure order items are properly set
-    const orderItems = order.items || order.orderItems || [];
+    let orderItems = [];
+    
+    // Handle different item structures
+    if (order.items && order.items.$values && Array.isArray(order.items.$values)) {
+      // Process items with $values structure
+      orderItems = order.items.$values;
+    } else if (order.items && Array.isArray(order.items)) {
+      // Process items as regular array
+      orderItems = order.items;
+    } else if (order.orderItems) {
+      // Handle if items are in orderItems property
+      orderItems = Array.isArray(order.orderItems) 
+        ? order.orderItems 
+        : (order.orderItems.$values || []);
+    }
+    
     console.log(`Order items for edit (count: ${orderItems.length}):`, orderItems);
     
     // Map items to ensure they have all required properties including productName
     const mappedItems = orderItems.map(item => ({
-      ...item,
-      productId: item.productId || item.product?.id,
-      productName: item.productName || item.product?.name || 'Unknown Product',
-      quantity: item.quantity || 0,
-      unitPrice: item.unitPrice || 0,
-      discount: item.discount || 0,
-      total: item.total || item.totalAmount || (item.quantity * item.unitPrice) || 0
+      id: item.id,
+      productId: item.productId || (item.product ? item.product.id : null),
+      productName: item.productName || (item.product ? item.product.name : 'Unknown Product'),
+      quantity: parseInt(item.quantity) || 0,
+      unitPrice: parseFloat(item.unitPrice) || 0,
+      discount: parseFloat(item.discount) || 0,
+      total: parseFloat(item.totalAmount || item.total || (item.quantity * item.unitPrice)) || 0
     }));
     
     // Debug the shipping cost value we're receiving
@@ -504,7 +607,7 @@ const Orders = () => {
     const formDataToSet = {
       ...order,
       id: order.id, // Make sure ID is included for update
-      customerId: order.customerId?.toString(),
+      customerId: (order.customerId || '').toString(),
       orderDate: formatDateForInput(order.orderDate),
       dueDate: formatDateForInput(order.dueDate),
       status: statusValue,
@@ -512,8 +615,8 @@ const Orders = () => {
       shippingAddress: order.shippingAddress || '',
       shippingMethod: order.shippingMethod || '',
       trackingNumber: order.trackingNumber || '',
-      taxRate: order.taxRate || 0,
-      taxAmount: order.taxAmount || 0,
+      taxRate: parseFloat(order.taxRate || 0),
+      taxAmount: parseFloat(order.taxAmount || 0),
       currency: order.currency || 'USD', // Ensure currency is set
       items: mappedItems
     };
@@ -610,6 +713,8 @@ const Orders = () => {
       // Parse the status value
       const statusValue = parseInt(formData.status) || 0;
       const isDraft = statusValue === 0;
+      const isCompleted = statusValue === 6; // Check if order is being set to Completed
+      const wasCompleted = isEditing && selectedOrder && selectedOrder.status === 6; // Check if it was already completed
       
       // Find the string status for the backend
       const statusString = typeof formData.status === 'string' && isNaN(parseInt(formData.status)) 
@@ -810,6 +915,28 @@ const Orders = () => {
           }
         }
         
+        // Update company revenue when an order is newly completed
+        if (isCompleted && !wasCompleted) {
+          // Calculate the grand total to add to revenue
+          const subtotal = calculateOrderTotal(formData.items);
+          const taxAmount = subtotal * (parseFloat(formData.taxRate || 0) / 100);
+          const shippingCost = parseFloat(formData.shippingCost || 0);
+          const grandTotal = subtotal + taxAmount + shippingCost;
+          
+          console.log('Updating company revenue with completed order total:', grandTotal);
+          
+          try {
+            const revenueResult = await dashboardService.updateCompanyRevenue(grandTotal);
+            if (revenueResult.success) {
+              console.log('Company revenue updated successfully');
+            } else {
+              console.error('Failed to update company revenue:', revenueResult.message);
+            }
+          } catch (error) {
+            console.error('Error updating company revenue:', error);
+          }
+        }
+        
         handleCloseDialog();
         fetchOrders();
         fetchProducts(); // Refresh products to get updated stock values
@@ -911,19 +1038,105 @@ const Orders = () => {
           // Check if we need to map OrderItems to items for consistency
           let orderData = result.data;
           
+          // Handle circular references JSON structure
+          if (orderData.$id) {
+            console.log("Detected complex JSON structure with $id references");
+            // Create a clean order object
+            
+            // Extract customer name with a comprehensive approach
+            const customerName = orderData.customerName || 
+                                (orderData.customer && typeof orderData.customer === 'object' ? orderData.customer.name : null) ||
+                                (orderData.customerId ? `Customer #${orderData.customerId}` : 'Unknown Customer');
+            
+            orderData = {
+              id: orderData.id,
+              companyId: orderData.companyId,
+              customerId: orderData.customerId,
+              orderNumber: orderData.orderNumber,
+              orderDate: orderData.orderDate,
+              dueDate: orderData.dueDate,
+              status: orderData.status,
+              notes: orderData.notes,
+              currency: orderData.currency,
+              shippingAddress: orderData.shippingAddress,
+              shippingMethod: orderData.shippingMethod,
+              trackingNumber: orderData.trackingNumber,
+              shippingCost: parseFloat(orderData.shippingCost || 0),
+              taxRate: parseFloat(orderData.taxRate || 0),
+              taxAmount: parseFloat(orderData.taxAmount || 0),
+              subTotal: parseFloat(orderData.subTotal || 0),
+              totalAmount: parseFloat(orderData.totalAmount || 0),
+              total: parseFloat(orderData.totalAmount || orderData.total || 0),
+              customerName: customerName,
+              customer: orderData.customer ? {
+                id: orderData.customer.id,
+                name: orderData.customer.name || customerName, // Ensure name is available
+                email: orderData.customer.email,
+                phone: orderData.customer.phone,
+                address: orderData.customer.address
+              } : {
+                // Create a minimal customer object if missing
+                id: orderData.customerId || 0,
+                name: customerName
+              }
+            };
+            
+            // Handle items with $values structure
+            if (orderData.items && orderData.items.$values) {
+              orderData.items = orderData.items.$values.map(item => ({
+                id: item.id,
+                productId: item.productId,
+                productName: item.product ? item.product.name : 'Unknown Product',
+                quantity: parseInt(item.quantity) || 0,
+                unitPrice: parseFloat(item.unitPrice || 0),
+                discount: parseFloat(item.discount || 0),
+                totalAmount: parseFloat(item.totalAmount || 0),
+                total: parseFloat(item.totalAmount || item.total || 0)
+              }));
+            }
+          }
+          
           // Ensure items array is properly set (check both orderItems and items properties)
           if (!orderData.items && orderData.orderItems) {
             console.log("Mapping orderItems to items for frontend consistency");
-            orderData = {
-              ...orderData,
-              items: orderData.orderItems.map(item => ({
-                ...item,
-                productName: item.product?.name || item.productName || 'Unknown Product'
-              }))
-            };
+            const orderItems = Array.isArray(orderData.orderItems) 
+              ? orderData.orderItems 
+              : (orderData.orderItems.$values || []);
+            
+            orderData.items = orderItems.map(item => ({
+              id: item.id,
+              productId: item.productId,
+              productName: item.productName || (item.product ? item.product.name : 'Unknown Product'),
+              quantity: parseInt(item.quantity) || 0,
+              unitPrice: parseFloat(item.unitPrice || 0),
+              discount: parseFloat(item.discount || 0),
+              total: parseFloat(item.totalAmount || item.total || 0)
+            }));
           } else if (!orderData.items) {
             // If no items array is found, create an empty one
             orderData.items = [];
+          }
+          
+          // Ensure customer information is always available
+          if (!orderData.customer || !orderData.customerName) {
+            const customerName = orderData.customerName || 
+                                (orderData.customerId ? `Customer #${orderData.customerId}` : 'Unknown Customer');
+            
+            if (!orderData.customer) {
+              orderData.customer = {
+                id: orderData.customerId || 0,
+                name: customerName
+              };
+            }
+            
+            if (!orderData.customerName) {
+              orderData.customerName = customerName;
+            }
+            
+            // If customer object exists but name is missing, set it
+            if (orderData.customer && !orderData.customer.name) {
+              orderData.customer.name = customerName;
+            }
           }
           
           // Ensure status is properly set
@@ -1138,7 +1351,7 @@ const Orders = () => {
     return statusInfo.label;
   };
 
-  // Update the filterOrders function to fix the duplicates issue
+  // Update the filterOrders function to include status filtering
   const filterOrders = () => {
     // Get URL parameters
     const searchParams = new URLSearchParams(location.search);
@@ -1195,6 +1408,23 @@ const Orders = () => {
       if (duplicates.length > 0 && debugMode) {
         console.log(`Removed ${duplicates.length} duplicate orders:`, duplicates);
       }
+    }
+    
+    // Filter by status if a specific status is selected
+    if (statusFilter !== 'all') {
+      const statusValue = parseInt(statusFilter);
+      visibleOrders = visibleOrders.filter(order => {
+        // Handle both numeric and string status values
+        if (typeof order.status === 'number') {
+          return order.status === statusValue;
+        } else if (typeof order.status === 'string' && !isNaN(parseInt(order.status))) {
+          return parseInt(order.status) === statusValue;
+        } else if (typeof order.status === 'string') {
+          const statusObj = orderStatuses.find(s => s.stringValue === order.status || s.label === order.status);
+          return statusObj?.value === statusValue;
+        }
+        return false;
+      });
     }
     
     // Filter by search term if provided
@@ -1260,10 +1490,10 @@ const Orders = () => {
     
     // If total or totalAmount is already set, use it
     if (selectedOrder.total) {
-      return selectedOrder.total;
+      return parseFloat(selectedOrder.total);
     }
     if (selectedOrder.totalAmount) {
-      return selectedOrder.totalAmount;
+      return parseFloat(selectedOrder.totalAmount);
     }
     
     // Otherwise calculate it from the components
@@ -1279,7 +1509,12 @@ const Orders = () => {
         return sum + itemTotal;
       }, 0);
     } else if (selectedOrder.orderItems && selectedOrder.orderItems.length > 0) {
-      subtotal = selectedOrder.orderItems.reduce((sum, item) => {
+      // Handle orderItems which might be a regular array or have $values structure
+      const orderItems = Array.isArray(selectedOrder.orderItems) 
+        ? selectedOrder.orderItems 
+        : (selectedOrder.orderItems.$values || []);
+      
+      subtotal = orderItems.reduce((sum, item) => {
         const quantity = parseFloat(item.quantity) || 1;
         const unitPrice = parseFloat(item.unitPrice) || 0;
         const discount = parseFloat(item.discount) || 0;
@@ -1288,12 +1523,12 @@ const Orders = () => {
       }, 0);
     } else {
       // If no items, use subtotal field if available
-      subtotal = selectedOrder.subTotal || 0;
+      subtotal = parseFloat(selectedOrder.subTotal || 0);
     }
     
     // Calculate tax and shipping
     const taxRate = parseFloat(selectedOrder.taxRate || 0);
-    const taxAmount = selectedOrder.taxAmount || (subtotal * (taxRate / 100));
+    const taxAmount = parseFloat(selectedOrder.taxAmount || (subtotal * (taxRate / 100)));
     const shippingCost = parseFloat(selectedOrder.shippingCost || 0);
     
     // Calculate and double-check the total
@@ -1511,6 +1746,19 @@ const Orders = () => {
               <Typography variant="body2" color="text.secondary">
                 Manage all your orders here. The system supports multiple orders from the same customer.
               </Typography>
+              {statusFilter !== 'all' && (
+                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 'bold', mr: 1 }}>
+                    Filtered by status:
+                  </Typography>
+                  <Chip
+                    label={orderStatuses.find(s => s.value === parseInt(statusFilter))?.label || 'Unknown'}
+                    color={orderStatuses.find(s => s.value === parseInt(statusFilter))?.color || 'default'}
+                    size="small"
+                    onDelete={() => setStatusFilter('all')}
+                  />
+                </Box>
+              )}
             </div>
             <Button 
               variant="contained" 
@@ -1539,6 +1787,34 @@ const Orders = () => {
                   ),
                 }}
               />
+              <FormControl variant="outlined" size="small" sx={{ minWidth: 200, mr: 2 }}>
+                <InputLabel id="status-filter-label">Status</InputLabel>
+                <Select
+                  labelId="status-filter-label"
+                  id="status-filter"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  label="Status"
+                >
+                  <MenuItem value="all">All Statuses</MenuItem>
+                  {orderStatuses.map((status) => (
+                    <MenuItem key={status.value} value={status.value.toString()}>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Box 
+                          sx={{ 
+                            width: 10, 
+                            height: 10, 
+                            borderRadius: '50%', 
+                            bgcolor: `${status.color}.main`,
+                            mr: 1
+                          }} 
+                        />
+                        {status.label}
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               <Button
                 variant="contained"
                 color="primary"
@@ -1549,278 +1825,7 @@ const Orders = () => {
               >
                 Refresh Orders
               </Button>
-              <Button
-                variant="outlined"
-                color="warning"
-                onClick={() => {
-                  localStorage.setItem('company_id', '2');
-                  showSnackbar('Company ID reset to 2', 'info');
-                  setTimeout(() => window.location.reload(), 1000);
-                }}
-                size="small"
-                sx={{ ml: 1 }}
-              >
-                Sorun Gider
-              </Button>
-              
-              {/* Add a cleanup button to fix invalid orders */}
-              <Button
-                variant="outlined"
-                color="error"
-                onClick={async () => {
-                  // First refresh orders to get the latest
-                  await fetchOrders();
-                  
-                  // Find invalid orders
-                  const invalidOrders = orders.filter(order => 
-                    (!order.customerName && !order.customer?.name && !order.customerId) || 
-                    !order.orderNumber
-                  );
-                  
-                  if (invalidOrders.length === 0) {
-                    showSnackbar('No invalid orders found!', 'success');
-                    return;
-                  }
-                  
-                  showSnackbar(`Found ${invalidOrders.length} invalid orders. Cleaning up...`, 'info');
-                  
-                  // Delete each invalid order
-                  for (const order of invalidOrders) {
-                    try {
-                      await orderService.delete(order.id);
-                      console.log(`Deleted invalid order with ID ${order.id}`);
-                    } catch (err) {
-                      console.error(`Failed to delete invalid order ${order.id}`, err);
-                    }
-                  }
-                  
-                  // Refresh the list
-                  fetchOrders();
-                  showSnackbar(`Cleanup completed. Removed ${invalidOrders.length} invalid orders.`, 'success');
-                }}
-                size="small"
-                sx={{ ml: 1 }}
-              >
-                Temizle
-              </Button>
-              
-              {/* Add debug button */}
-              <Button
-                variant="text"
-                color="inherit"
-                onClick={() => {
-                  // Toggle between normal view and showing all orders
-                  const currentUrl = new URL(window.location.href);
-                  const params = new URLSearchParams(currentUrl.search);
-                  
-                  if (params.get('showAll') === 'true') {
-                    params.delete('showAll');
-                    showSnackbar('Switched to normal view - filtering invalid orders', 'info');
-                  } else {
-                    params.set('showAll', 'true');
-                    showSnackbar('Showing ALL orders including invalid ones for debugging', 'warning');
-                  }
-                  
-                  currentUrl.search = params.toString();
-                  window.history.replaceState({}, '', currentUrl.toString());
-                  
-                  // Force re-render by setting a state
-                  setSearchTerm(searchTerm + ' ');
-                  setTimeout(() => setSearchTerm(searchTerm.trim()), 10);
-                }}
-                size="small"
-                sx={{ ml: 1 }}
-              >
-                Debug
-              </Button>
-              
-              {/* Debug Mode button */}
-              <Button
-                variant="text"
-                color={new URLSearchParams(location.search).get('debug') === 'true' ? "success" : "inherit"}
-                onClick={() => {
-                  // Toggle debug mode
-                  const currentUrl = new URL(window.location.href);
-                  const params = new URLSearchParams(currentUrl.search);
-                  
-                  if (params.get('debug') === 'true') {
-                    params.delete('debug');
-                    showSnackbar('Debug mode disabled', 'info');
-                  } else {
-                    params.set('debug', 'true');
-                    showSnackbar('Debug mode enabled - showing detailed info', 'warning');
-                  }
-                  
-                  currentUrl.search = params.toString();
-                  window.history.replaceState({}, '', currentUrl.toString());
-                  
-                  // Force re-render by setting a state
-                  setSearchTerm(searchTerm + ' ');
-                  setTimeout(() => setSearchTerm(searchTerm.trim()), 10);
-                }}
-                size="small"
-                sx={{ ml: 1 }}
-              >
-                Debug Mode
-              </Button>
-              
-              {/* Clean Duplicates button */}
-              <Button
-                variant="contained"
-                color="error"
-                onClick={async () => {
-                  // Find all temporary and duplicate orders
-                  console.log('Looking for temporary and duplicate orders to clean up');
-                  
-                  // Create a map to track orders by ID
-                  const orderById = new Map();
-                  const duplicates = [];
-                  const temporaryOrders = [];
-                  
-                  // First identify duplicates and temporary orders
-                  orders.forEach(order => {
-                    // Check if it's a temporary order (TMP- prefix or generated ID)
-                    if (order.orderNumber && order.orderNumber.startsWith('TMP-')) {
-                      temporaryOrders.push(order);
-                      return;
-                    }
-
-                    // Check if it's a duplicate by ID (a true duplicate)
-                    if (order.id) {
-                      if (orderById.has(order.id)) {
-                        duplicates.push(order);
-                      } else {
-                        orderById.set(order.id, order);
-                      }
-                    }
-                  });
-                  
-                  // Show confirmation with counts
-                  if (duplicates.length === 0 && temporaryOrders.length === 0) {
-                    showSnackbar('No duplicate or temporary orders found to clean up', 'info');
-                    return;
-                  }
-                  
-                  // Confirm with the user
-                  const confirmed = window.confirm(
-                    `Found ${duplicates.length} duplicate orders and ${temporaryOrders.length} temporary orders. Delete these?`
-                  );
-                  
-                  if (!confirmed) {
-                    showSnackbar('Clean up cancelled', 'info');
-                    return;
-                  }
-                  
-                  // Delete the duplicate and temporary orders
-                  let deleteCount = 0;
-                  let errorCount = 0;
-                  
-                  // Process duplicates
-                  for (const order of duplicates) {
-                    try {
-                      if (order.id) {
-                        const result = await orderService.delete(order.id);
-                        if (result.success) {
-                          deleteCount++;
-                        } else {
-                          console.error(`Failed to delete duplicate order ${order.id}:`, result.message);
-                          errorCount++;
-                        }
-                      }
-                    } catch (err) {
-                      console.error(`Error deleting duplicate order ${order.id}:`, err);
-                      errorCount++;
-                    }
-                  }
-                  
-                  // Process temporary orders
-                  for (const order of temporaryOrders) {
-                    try {
-                      if (order.id) {
-                        const result = await orderService.delete(order.id);
-                        if (result.success) {
-                          deleteCount++;
-                        } else {
-                          console.error(`Failed to delete temporary order ${order.id}:`, result.message);
-                          errorCount++;
-                        }
-                      }
-                    } catch (err) {
-                      console.error(`Error deleting temporary order ${order.id}:`, err);
-                      errorCount++;
-                    }
-                  }
-                  
-                  // Show result and refresh
-                  showSnackbar(`Cleaned up ${deleteCount} orders. ${errorCount > 0 ? `Failed to delete ${errorCount} orders.` : ''}`, 
-                    errorCount > 0 ? 'warning' : 'success');
-                  
-                  // Refresh the orders list
-                  await fetchOrders();
-                }}
-              >
-                Clean Duplicates
-              </Button>
-              
-              {/* Force Refresh button */}
-              <Button
-                variant="contained"
-                color="warning"
-                onClick={async () => {
-                  // Clear local storage session data to force fresh API data
-                  console.log('Forcing a complete refresh of order data');
-                  
-                  setLoading(true);
-                  showSnackbar('Force refreshing orders data...', 'info');
-                  
-                  try {
-                    // First clear any cached orders data
-                    localStorage.removeItem('orders_cache');
-                    localStorage.removeItem('orders_timestamp');
-                    
-                    // Call the API directly with a cache-busting parameter
-                    const companyId = localStorage.getItem('company_id');
-                    const url = `/Order/company/${companyId}?cache_bust=${Date.now()}`;
-                    
-                    // Import the API service dynamically
-                    const { default: api } = await import('../services/api');
-                    const response = await api.get(url);
-                    
-                    console.log('Direct API response:', response.data);
-                    
-                    // Now fetch the normal orders through the service
-                    await fetchOrders();
-                    
-                    showSnackbar('Orders data forcefully refreshed!', 'success');
-                  } catch (err) {
-                    console.error('Error during force refresh:', err);
-                    showSnackbar('Error during force refresh, trying normal refresh instead', 'error');
-                    await fetchOrders();
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
-                size="small"
-                sx={{ ml: 1 }}
-              >
-                Force Refresh
-              </Button>
             </Box>
-
-            {/* Debug Info Section - only shown when debug mode is enabled */}
-            {new URLSearchParams(location.search).get('debug') === 'true' && (
-              <Box sx={{ mt: 2, p: 2, bgcolor: 'info.light', borderRadius: 1, color: 'white' }}>
-                <Typography variant="h6" gutterBottom>Debug Information</Typography>
-                <Typography variant="body2">Total Orders (unfiltered): {orders.length}</Typography>
-                <Typography variant="body2">Orders displayed: {filteredOrders.length}</Typography>
-                <Typography variant="body2">Show All Mode: {new URLSearchParams(location.search).get('showAll') === 'true' ? 'Enabled' : 'Disabled'}</Typography>
-                <Typography variant="body2">Deduplication: Orders are now deduplicated by ID, not by order number. Multiple orders from the same customer will show correctly.</Typography>
-                <Typography variant="body2">Order Data:</Typography>
-                <Box component="pre" sx={{ mt: 1, p: 1, bgcolor: 'rgba(0,0,0,0.2)', borderRadius: 1, maxHeight: 100, overflow: 'auto', fontSize: '0.75rem' }}>
-                  {JSON.stringify(orders.slice(0, 2), null, 2)}
-                </Box>
-              </Box>
-            )}
           </Paper>
 
           {error && (
@@ -1896,7 +1901,8 @@ const Orders = () => {
                       >
                         <TableCell>{order.orderNumber}</TableCell>
                         <TableCell>
-                          {order.customerName || order.customer?.name || 
+                          {order.customerName || 
+                           (order.customer?.name) || 
                            (order.customerId ? `Customer #${order.customerId}` : 'Unknown Customer')}
                         </TableCell>
                         <TableCell>

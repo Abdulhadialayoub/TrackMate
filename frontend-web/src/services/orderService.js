@@ -88,24 +88,243 @@ export const orderService = {
 
   getById: async (id) => {
     try {
-      const response = await api.get(`/Order/${id}`);
+      console.log(`Requesting order details for ID: ${id}`);
       
-      // Handle direct object and Preserve reference object
-      const orderData = (response.data && response.data.$ref) ? 
-        response.data : response.data;
+      const response = await api.get(`/Order/${id}`);
+      console.log('Order details response status:', response.status);
+      
+      // Extra safety check - if we get a completely unexpected format, attempt manual normalization
+      if (response.data && typeof response.data === 'string') {
+        console.warn('Received string data instead of object - attempting to parse');
+        try {
+          response.data = JSON.parse(response.data);
+        } catch (parseError) {
+          console.error('Failed to parse string response data:', parseError);
+          return {
+            success: false,
+            message: 'Invalid response format from API',
+            data: null
+          };
+        }
+      }
+      
+      if (!response.data) {
+        throw new Error('Order not found');
+      }
+      
+      try {
+        // Process the response data
+        let orderData = response.data;
+        
+        // Create a sanitized order object
+        const timestamp = new Date().toISOString().replace(/[-:.]/g, '').substring(0, 14);
+        const randomSuffix = Math.random().toString(36).substring(2, 8);
+        
+        // Create base order object with default values for any missing properties
+        const sanitizedOrder = {
+          id: orderData.id || `temp-${timestamp}-${randomSuffix}`,
+          companyId: orderData.companyId || parseInt(localStorage.getItem('company_id') || '1'),
+          customerId: orderData.customerId || null,
+          orderNumber: orderData.orderNumber || `ORD-DETAIL-${timestamp}-${randomSuffix}`,
+          orderDate: orderData.orderDate || new Date().toISOString(),
+          dueDate: orderData.dueDate || null,
+          status: typeof orderData.status === 'number' ? orderData.status : 
+                (typeof orderData.status === 'string' && !isNaN(parseInt(orderData.status))) ? 
+                parseInt(orderData.status) : 0, // Default to Draft (0)
+          notes: orderData.notes || '',
+          currency: orderData.currency || 'USD',
+          customerName: orderData.customerName || (orderData.customer ? orderData.customer.name : null)
+        };
+        
+        // Handle financial values with extra safety
+        sanitizedOrder.subTotal = typeof orderData.subTotal !== 'undefined' ? parseFloat(orderData.subTotal || 0) : 0;
+        sanitizedOrder.taxRate = typeof orderData.taxRate !== 'undefined' ? parseFloat(orderData.taxRate || 0) : 0;
+        sanitizedOrder.taxAmount = typeof orderData.taxAmount !== 'undefined' ? parseFloat(orderData.taxAmount || 0) : 0;
+        sanitizedOrder.shippingCost = typeof orderData.shippingCost !== 'undefined' ? parseFloat(orderData.shippingCost || 0) : 0;
+        sanitizedOrder.totalAmount = typeof orderData.totalAmount !== 'undefined' ? parseFloat(orderData.totalAmount || 0) : 
+                                   (typeof orderData.total !== 'undefined' ? parseFloat(orderData.total || 0) : 0);
+        sanitizedOrder.total = typeof orderData.totalAmount !== 'undefined' ? parseFloat(orderData.totalAmount || 0) : 
+                            (typeof orderData.total !== 'undefined' ? parseFloat(orderData.total || 0) : 0);
+        
+        // Handle shipping details
+        sanitizedOrder.shippingAddress = typeof orderData.shippingAddress === 'string' ? orderData.shippingAddress : '';
+        sanitizedOrder.shippingMethod = typeof orderData.shippingMethod === 'string' ? orderData.shippingMethod : '';
+        sanitizedOrder.trackingNumber = typeof orderData.trackingNumber === 'string' ? orderData.trackingNumber : '';
+        
+        // Process customer information
+        if (orderData.customer && typeof orderData.customer === 'object') {
+          sanitizedOrder.customer = {
+            id: orderData.customer.id,
+            name: typeof orderData.customer.name === 'string' ? orderData.customer.name : 'Unknown Customer',
+            email: typeof orderData.customer.email === 'string' ? orderData.customer.email : '',
+            phone: typeof orderData.customer.phone === 'string' ? orderData.customer.phone : '',
+            address: typeof orderData.customer.address === 'string' ? orderData.customer.address : ''
+          };
+          
+          // Ensure customerName is set if available from customer object
+          if (!sanitizedOrder.customerName && orderData.customer.name) {
+            sanitizedOrder.customerName = typeof orderData.customer.name === 'string' ? orderData.customer.name : 'Unknown Customer';
+          }
+        }
+        
+        // If customerName is still not set, use a fallback
+        if (!sanitizedOrder.customerName) {
+          sanitizedOrder.customerName = sanitizedOrder.customerId ? 
+            `Customer #${sanitizedOrder.customerId}` : 'Unknown Customer';
+        }
+        
+        // Process order items safely
+        let orderItems = [];
+        
+        // Handle different item structures
+        if (orderData.items && orderData.items.$values && Array.isArray(orderData.items.$values)) {
+          // Process items with $values structure
+          orderItems = orderData.items.$values;
+        } else if (orderData.items && Array.isArray(orderData.items)) {
+          // Process items as regular array
+          orderItems = orderData.items;
+        } else if (orderData.orderItems) {
+          // Handle if items are in orderItems property
+          orderItems = Array.isArray(orderData.orderItems) 
+            ? orderData.orderItems 
+            : (orderData.orderItems.$values && Array.isArray(orderData.orderItems.$values)) 
+              ? orderData.orderItems.$values 
+              : [];
+        }
+        
+        // Sanitize each item
+        sanitizedOrder.items = orderItems.filter(item => item && typeof item === 'object').map(item => {
+          try {
+            return {
+              id: item.id || `item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+              productId: parseInt(item.productId) || 0,
+              productName: item.productName || (item.product ? item.product.name : 'Unknown Product'),
+              quantity: parseInt(item.quantity) || 0,
+              unitPrice: parseFloat(item.unitPrice || 0),
+              discount: parseFloat(item.discount || 0),
+              taxRate: parseFloat(item.taxRate || 0),
+              taxAmount: parseFloat(item.taxAmount || 0),
+              totalAmount: parseFloat(item.totalAmount || 0),
+              total: parseFloat(item.totalAmount || item.total || (item.quantity * item.unitPrice)) || 0
+            };
+          } catch (itemError) {
+            console.error('Error processing order item:', itemError);
+            return null;
+          }
+        }).filter(item => item !== null); // Remove null items
+        
+        console.log('Processed order details:', sanitizedOrder);
       
       return {
         success: true,
-        data: orderData
-      };
+          data: sanitizedOrder
+        };
+      } catch (processingError) {
+        console.error('Error processing order data:', processingError);
+        return {
+          success: false,
+          message: 'Error processing order data: ' + processingError.message,
+          error: processingError
+        };
+      }
     } catch (error) {
       console.error(`Error getting order ${id}:`, error);
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to get order',
+        message: error.response?.data?.message || 'Failed to get order details',
         error: error.response?.data
       };
     }
+  },
+
+  // Add this helper function to resolve references in JSON data
+  resolveReferences: (json) => {
+    // If not an object or null, return as is
+    if (!json || typeof json !== 'object') return json;
+
+    // Create a map of objects by their $id
+    const objectsById = new Map();
+    
+    // First pass - collect all objects with $id
+    const collectObjectsByIds = (obj) => {
+      if (!obj || typeof obj !== 'object') return;
+      
+      if (obj.$id) {
+        objectsById.set(obj.$id, obj);
+      }
+      
+      if (Array.isArray(obj)) {
+        obj.forEach(item => collectObjectsByIds(item));
+        return;
+      }
+      
+      // Process object properties
+      Object.values(obj).forEach(value => {
+        if (value && typeof value === 'object') {
+          collectObjectsByIds(value);
+        }
+      });
+    };
+    
+    // Collect objects by ID
+    if (json.$values && Array.isArray(json.$values)) {
+      collectObjectsByIds(json);
+      
+      // Second pass - resolve references to actual objects
+      const resolveRefs = (obj, visited = new Set()) => {
+        if (!obj || typeof obj !== 'object') return obj;
+        if (visited.has(obj)) return obj; // Avoid circular references
+        
+        visited.add(obj);
+        
+        // Handle $ref property
+        if (obj.$ref) {
+          const referencedObj = objectsById.get(obj.$ref);
+          if (referencedObj) {
+            // Special handling for customer references
+            if (obj.$ref.includes('customer') || obj.$ref.includes('Customer')) {
+              const processedCustomer = {...resolveRefs({...referencedObj}, visited)};
+              // Ensure customer has a name
+              if (!processedCustomer.name && !processedCustomer.Name) {
+                processedCustomer.name = "Unknown Customer";
+              }
+              return processedCustomer;
+            }
+            
+            // Return a copy of the referenced object to avoid circular issues
+            return resolveRefs({...referencedObj}, visited);
+          }
+          return {}; // Referenced object not found
+        }
+        
+        // Handle arrays
+        if (Array.isArray(obj)) {
+          return obj.map(item => resolveRefs(item, new Set(visited)));
+        }
+        
+        // Process each property
+        const result = {...obj};
+        for (const key in result) {
+          if (result[key] && typeof result[key] === 'object') {
+            result[key] = resolveRefs(result[key], new Set(visited));
+          }
+        }
+        
+        // Add missing customer name if we have customer ID but no name
+        if (result.customerId && !result.customerName && (!result.customer || !result.customer.name)) {
+          result.customerName = `Customer #${result.customerId}`;
+        }
+        
+        return result;
+      };
+      
+      // Return the resolved array
+      return json.$values.map(item => resolveRefs(item));
+    }
+    
+    // For direct objects
+    collectObjectsByIds(json);
+    return resolveReferences(json, new Set());
   },
 
   getByCompanyId: async (companyId) => {
@@ -138,83 +357,209 @@ export const orderService = {
       
       console.log(`Response status: ${response.status}`);
       console.log('Response headers:', response.headers);
-      console.log('Response data:', response.data);
+      console.log('Response data type:', typeof response.data);
       
-      // Check for different response formats and process data
-      let ordersData = [];
-      
-      if (Array.isArray(response.data)) {
-        ordersData = response.data;
-      } else if (response.data && typeof response.data === 'object') {
-        // Handle different response formats
-        if (response.data.$values && Array.isArray(response.data.$values)) {
-          ordersData = response.data.$values;
-        } else if (response.data.data && Array.isArray(response.data.data)) {
-          ordersData = response.data.data;
-        } else {
-          // Extract all possible array properties
-          const possibleArrayProps = Object.entries(response.data)
-            .filter(([_, val]) => Array.isArray(val))
-            .map(([key, val]) => ({ key, length: val.length }));
-          
-          if (possibleArrayProps.length > 0) {
-            const bestProp = possibleArrayProps.sort((a, b) => b.length - a.length)[0];
-            ordersData = response.data[bestProp.key];
-          }
-        }
-      }
-      
-      // Process and validate each order to ensure they have IDs and required properties
-      const processedOrders = ordersData.map(order => {
-        if (!order) return null;
-        
-        // If order is empty or just a reference, skip it
-        if (order.$ref || Object.keys(order).length === 0) {
-          return null;
-        }
-        
-        // Ensure the order has a valid ID
-        if (!order.id) {
-          console.warn('Found order without ID:', order);
-          // Generate a temporary ID with a consistent prefix for temporary orders
-          order.id = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-          order.hasTemporaryId = true;
-        }
-        
-        return order;
-      }).filter(order => order !== null);
-      
-      console.log(`Processed ${processedOrders.length} valid orders out of ${ordersData.length} total`);
-      
-      return {
-        success: true,
-        data: processedOrders
-      };
-    } catch (error) {
-      console.error(`Error getting orders for company ${companyId}:`, error);
-      
-      // Add more detailed logging for the error
-      if (error.response) {
-        console.error('Error response status:', error.response.status);
-        console.error('Error response data:', error.response.data);
-        
-        // Special handling for 400 Bad Request errors
-        if (error.response.status === 400) {
-          console.error('Bad Request (400) error details:', error.response.data);
+      // Extra safety check - if we get a completely unexpected format, attempt manual normalization
+      if (response.data && typeof response.data === 'string') {
+        console.warn('Received string data instead of object/array - attempting to parse');
+        try {
+          response.data = JSON.parse(response.data);
+        } catch (parseError) {
+          console.error('Failed to parse string response data:', parseError);
           return {
             success: false,
-            message: 'Invalid request format or parameters. Please check company ID.',
-            error: error.response.data,
+            message: 'Invalid response format from API',
             data: []
           };
         }
       }
       
+      // Process the response data and resolve references
+      if (response.data) {
+        console.log('Raw API Response first sample:', {
+          responseType: typeof response.data,
+          hasValues: response.data.$values ? true : false,
+          firstItem: response.data.$values ? response.data.$values[0] : (Array.isArray(response.data) ? response.data[0] : null)
+        });
+        
+        // Try to resolve references
+        let resolvedData = [];
+        try {
+          console.log('Attempting to resolve references in API response');
+          
+          // Check for different data structures
+        if (response.data.$values && Array.isArray(response.data.$values)) {
+            // First, try to resolve references if the data uses $ref and $id pattern
+            resolvedData = orderService.resolveReferences(response.data);
+            console.log(`Resolved ${resolvedData.length} orders with references`);
+          } else if (Array.isArray(response.data)) {
+            resolvedData = response.data;
+            console.log(`Using ${resolvedData.length} orders from direct array`);
+          } else if (response.data && typeof response.data === 'object') {
+            // If it's a single object, wrap it in an array
+            resolvedData = [response.data];
+            console.log('Using single order object');
+          }
+          
+          // Debug log first item to verify customer handling
+          if (resolvedData.length > 0) {
+            const sample = resolvedData[0];
+            console.log('Sample order after reference resolution:', {
+              id: sample.id,
+              customerName: sample.customerName,
+              customer: sample.customer ? {
+                id: sample.customer.id,
+                name: sample.customer.name
+              } : 'No customer object'
+            });
+          }
+        } catch (refError) {
+          console.error('Error resolving references:', refError);
+          // Fall back to original data structure
+          resolvedData = Array.isArray(response.data) ? response.data : 
+                        (response.data.$values && Array.isArray(response.data.$values)) ? 
+                        response.data.$values : [response.data];
+        }
+        
+        // Proceed with normal sanitization from here with the resolved data
+        // Handle various response formats
+        let ordersData = resolvedData.filter(item => item); // Filter out null/undefined
+        
+        // Extra check - if ordersData is not an array, force it to be one
+        if (!Array.isArray(ordersData)) {
+          console.warn('Orders data is not an array, converting to array:', ordersData);
+          ordersData = ordersData ? [ordersData] : [];
+        }
+        
+        // Process each order to sanitize data - with extra safety checks
+        const sanitizedOrders = ordersData.map(order => {
+          // Skip null or non-object orders
+          if (!order || typeof order !== 'object') {
+            console.warn('Skipping invalid order data:', order);
+            return null;
+          }
+          
+          try {
+            // Generate a random suffix for uniqueness
+            const randomSuffix = Math.random().toString(36).substring(2, 8);
+            const timestamp = new Date().toISOString().replace(/[-:.]/g, '').substring(0, 14);
+            
+            // Create a sanitized order object with default values for missing properties
+            const sanitizedOrder = {
+              id: order.id || `temp-${timestamp}-${randomSuffix}`,
+              companyId: order.companyId || companyIdInt,
+              customerId: order.customerId || null,
+              orderNumber: order.orderNumber || `ORD-${companyIdInt}-${timestamp}-${randomSuffix}`,
+              orderDate: order.orderDate || new Date().toISOString(),
+              dueDate: order.dueDate || null,
+              status: typeof order.status === 'number' ? order.status : 
+                    (typeof order.status === 'string' && !isNaN(parseInt(order.status))) ? 
+                    parseInt(order.status) : 0, // Default to Draft (0)
+              notes: order.notes || '',
+              currency: order.currency || 'USD',
+              customerName: order.customerName || (order.customer ? order.customer.name : null)
+            };
+            
+            // Handle financial values with extra safety
+            sanitizedOrder.subTotal = typeof order.subTotal !== 'undefined' ? parseFloat(order.subTotal || 0) : 0;
+            sanitizedOrder.taxRate = typeof order.taxRate !== 'undefined' ? parseFloat(order.taxRate || 0) : 0;
+            sanitizedOrder.taxAmount = typeof order.taxAmount !== 'undefined' ? parseFloat(order.taxAmount || 0) : 0;
+            sanitizedOrder.shippingCost = typeof order.shippingCost !== 'undefined' ? parseFloat(order.shippingCost || 0) : 0;
+            sanitizedOrder.totalAmount = typeof order.totalAmount !== 'undefined' ? parseFloat(order.totalAmount || 0) : 
+                                        (typeof order.total !== 'undefined' ? parseFloat(order.total || 0) : 0);
+            sanitizedOrder.total = typeof order.totalAmount !== 'undefined' ? parseFloat(order.totalAmount || 0) : 
+                                  (typeof order.total !== 'undefined' ? parseFloat(order.total || 0) : 0);
+            
+            // Handle shipping details
+            sanitizedOrder.shippingAddress = typeof order.shippingAddress === 'string' ? order.shippingAddress : '';
+            sanitizedOrder.shippingMethod = typeof order.shippingMethod === 'string' ? order.shippingMethod : '';
+            sanitizedOrder.trackingNumber = typeof order.trackingNumber === 'string' ? order.trackingNumber : '';
+            
+            // Process customer information
+            if (order.customer && typeof order.customer === 'object') {
+              sanitizedOrder.customer = {
+                id: order.customer.id,
+                name: typeof order.customer.name === 'string' ? order.customer.name : 'Unknown Customer',
+                email: typeof order.customer.email === 'string' ? order.customer.email : '',
+                phone: typeof order.customer.phone === 'string' ? order.customer.phone : '',
+                address: typeof order.customer.address === 'string' ? order.customer.address : ''
+              };
+              
+              // Ensure customerName is set if available from customer object
+              if (!sanitizedOrder.customerName && order.customer.name) {
+                sanitizedOrder.customerName = typeof order.customer.name === 'string' ? order.customer.name : 'Unknown Customer';
+              }
+            }
+            
+            // If customerName is still not set, use a fallback
+            if (!sanitizedOrder.customerName) {
+              sanitizedOrder.customerName = sanitizedOrder.customerId ? 
+                `Customer #${sanitizedOrder.customerId}` : 'Unknown Customer';
+            }
+            
+            // Process order items with extra safety
+            let orderItems = [];
+            
+            // Handle different item structures
+            if (order.items && order.items.$values && Array.isArray(order.items.$values)) {
+              // Process items with $values structure
+              orderItems = order.items.$values;
+            } else if (order.items && Array.isArray(order.items)) {
+              // Process items as regular array
+              orderItems = order.items;
+            } else if (order.orderItems) {
+              // Handle if items are in orderItems property
+              orderItems = Array.isArray(order.orderItems) 
+                ? order.orderItems 
+                : (order.orderItems.$values && Array.isArray(order.orderItems.$values)) 
+                  ? order.orderItems.$values 
+                  : [];
+            }
+            
+            // Safely process order items
+            sanitizedOrder.items = orderItems.filter(item => item && typeof item === 'object').map(item => {
+              try {
+                return {
+                  id: item.id || `item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                  productId: parseInt(item.productId) || 0,
+                  productName: item.productName || (item.product ? item.product.name : 'Unknown Product'),
+                  quantity: parseInt(item.quantity) || 0,
+                  unitPrice: parseFloat(item.unitPrice || 0),
+                  discount: parseFloat(item.discount || 0),
+                  taxRate: parseFloat(item.taxRate || 0),
+                  taxAmount: parseFloat(item.taxAmount || 0),
+                  totalAmount: parseFloat(item.totalAmount || 0),
+                  total: parseFloat(item.totalAmount || item.total || (item.quantity * item.unitPrice)) || 0
+                };
+              } catch (itemError) {
+                console.error('Error processing order item:', itemError);
+                return null;
+              }
+            }).filter(item => item !== null); // Remove null items
+            
+            return sanitizedOrder;
+          } catch (orderError) {
+            console.error('Error processing order:', orderError, order);
+            return null;
+          }
+        }).filter(order => order !== null); // Remove null orders
+        
+        return {
+          success: true,
+          data: sanitizedOrders
+        };
+      }
+      
+      return {
+        success: true,
+        data: []
+      };
+    } catch (error) {
+      console.error(`Error getting orders for company ${companyId}:`, error);
       return {
         success: false,
-        message: error.response?.data?.message || `Failed to get company orders for company ${companyId}`,
-        error: error.response?.data,
-        data: []
+        message: error.response?.data?.message || 'Failed to get company orders',
+        error: error.response?.data
       };
     }
   },

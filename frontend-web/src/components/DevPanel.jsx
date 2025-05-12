@@ -250,7 +250,38 @@ const DevPanel = () => {
         // Önce API'dan almayı dene
         const response = await api.get('/User', { timeout: 5000 });
         console.log('Users API response:', response);
-        setUsers(response.data);
+        
+        // Handle API response safely - extract users array from response data
+        // Handle cases where response.data might be an object with nested arrays like {$values: [...]}
+        let userData;
+        if (response.data && typeof response.data === 'object') {
+          // Check if data has $values property (common in .NET API responses)
+          if (Array.isArray(response.data.$values)) {
+            userData = response.data.$values;
+          } 
+          // Check if data itself is an array
+          else if (Array.isArray(response.data)) {
+            userData = response.data;
+          }
+          // Check if data is a simple object with users property
+          else if (response.data.users && Array.isArray(response.data.users)) {
+            userData = response.data.users;
+          }
+          // Last resort - try to extract any array properties
+          else {
+            const possibleArrays = Object.values(response.data).filter(val => Array.isArray(val));
+            if (possibleArrays.length > 0) {
+              userData = possibleArrays[0];
+            } else {
+              userData = [];
+            }
+          }
+        } else {
+          userData = [];
+        }
+        
+        console.log('Processed users data:', userData);
+        setUsers(userData);
       } catch (apiError) {
         console.error('API error when fetching users, using mock data instead:', apiError);
         // API başarısız olursa mock veri kullan
@@ -300,7 +331,37 @@ const DevPanel = () => {
         // Önce API'dan almayı dene
         const response = await api.get('/Company', { timeout: 5000 });
         console.log('Companies API response:', response);
-        setCompanies(response.data);
+        
+        // Handle API response safely - extract companies array from response data
+        let companyData;
+        if (response.data && typeof response.data === 'object') {
+          // Check if data has $values property (common in .NET API responses)
+          if (Array.isArray(response.data.$values)) {
+            companyData = response.data.$values;
+          } 
+          // Check if data itself is an array
+          else if (Array.isArray(response.data)) {
+            companyData = response.data;
+          }
+          // Check if data is a simple object with companies property
+          else if (response.data.companies && Array.isArray(response.data.companies)) {
+            companyData = response.data.companies;
+          }
+          // Last resort - try to extract any array properties
+          else {
+            const possibleArrays = Object.values(response.data).filter(val => Array.isArray(val));
+            if (possibleArrays.length > 0) {
+              companyData = possibleArrays[0];
+            } else {
+              companyData = [];
+            }
+          }
+        } else {
+          companyData = [];
+        }
+        
+        console.log('Processed companies data:', companyData);
+        setCompanies(companyData);
       } catch (apiError) {
         console.error('API error when fetching companies, using mock data instead:', apiError);
         // API başarısız olursa mock veri kullan
@@ -621,20 +682,29 @@ const DevPanel = () => {
     setLoadingBackups(true);
     try {
       const response = await api.get('/Database/backup/list');
-      setBackups(response.data.backups || []);
+      // Directly set the raw data - our rendering logic will handle extraction
+      setBackups(response.data);
     } catch (error) {
       console.error('Error fetching backups:', error);
-      showAlert('error', 'Failed to load backup list: ' + (error.response?.data || error.message));
+      showAlert('error', 'Failed to load backup list: ' + (error.response?.data?.message || error.message));
       setBackups([]);
     } finally {
       setLoadingBackups(false);
     }
   };
 
-  const downloadBackup = async (fileName) => {
+  const downloadBackup = async (fileName, downloadUrl) => {
     try {
+      if (!fileName) {
+        showAlert('error', 'Invalid backup filename');
+        return;
+      }
+      
+      // Determine the endpoint to use
+      const endpoint = downloadUrl || `/Database/backup/download/${fileName}`;
+      
       // Make API request with proper authorization (handled by interceptor now)
-      const response = await api.get(`/Database/backup/download/${fileName}`, {
+      const response = await api.get(endpoint, {
         responseType: 'blob' // Important for file downloads
       });
       
@@ -649,6 +719,8 @@ const DevPanel = () => {
       // Clean up
       window.URL.revokeObjectURL(url);
       document.body.removeChild(link);
+      
+      showAlert('success', `Downloading backup: ${fileName}`);
     } catch (error) {
       console.error('Error downloading backup:', error);
       showAlert('error', 'Failed to download backup file');
@@ -1000,36 +1072,79 @@ const DevPanel = () => {
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexGrow: 1 }}>
                   <CircularProgress size={24} />
                 </Box>
-              ) : backups.length === 0 ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexGrow: 1 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    No backups available
-                  </Typography>
-                </Box>
               ) : (
-                <List dense sx={{ overflow: 'auto', maxHeight: 300, flexGrow: 1 }}>
-                  {backups.map((backup, index) => (
-                    <React.Fragment key={backup.fileName || index}>
-                      <ListItem
-                        secondaryAction={
-                          <IconButton 
-                            edge="end" 
-                            size="small" 
-                            onClick={() => downloadBackup(backup.fileName)}
-                          >
-                            <DownloadIcon fontSize="small" />
-                          </IconButton>
+                <Box sx={{ flexGrow: 1 }}>
+                  {(() => {
+                    // Get the actual backups array, handling the specific .NET structure
+                    let actualBackups = [];
+                    
+                    try {
+                      // Handle the specific structure shown in the API response
+                      if (backups && backups.backups && backups.backups.$values) {
+                        // The exact structure we're seeing
+                        actualBackups = backups.backups.$values;
+                      }
+                      // Other possible structures
+                      else if (backups && backups.$values) {
+                        actualBackups = backups.$values;
+                      }
+                      else if (backups && backups.backups) {
+                        // If backups.backups is directly an array
+                        if (Array.isArray(backups.backups)) {
+                          actualBackups = backups.backups;
                         }
-                      >
-                        <ListItemText 
-                          primary={backup.fileName} 
-                          secondary={backup.createdAt ? new Date(backup.createdAt).toLocaleString() : 'Unknown date'} 
-                        />
-                      </ListItem>
-                      {index < backups.length - 1 && <Divider component="li" />}
-                    </React.Fragment>
-                  ))}
-                </List>
+                      }
+                      else if (Array.isArray(backups)) {
+                        actualBackups = backups;
+                      }
+                    } catch (error) {
+                      console.error('Error processing backups data:', error);
+                    }
+                    
+                    // Check if we have any backups to display
+                    if (!actualBackups.length) {
+                      return (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100px' }}>
+                          <Typography variant="body2" color="text.secondary">
+                            No backups available
+                          </Typography>
+                        </Box>
+                      );
+                    }
+                    
+                    // If we have backups, render them
+                    return (
+                      <List dense sx={{ overflow: 'auto', maxHeight: 300 }}>
+                        {actualBackups.map((backup, index) => (
+                          <React.Fragment key={backup?.fileName || `backup-${index}`}>
+                            <ListItem
+                              secondaryAction={
+                                <IconButton 
+                                  edge="end" 
+                                  size="small" 
+                                  onClick={() => downloadBackup(backup?.fileName, backup?.downloadUrl)}
+                                >
+                                  <DownloadIcon fontSize="small" />
+                                </IconButton>
+                              }
+                            >
+                              <ListItemText 
+                                primary={backup?.fileName || `Backup ${index + 1}`} 
+                                secondary={
+                                  <>
+                                    {backup?.createdAt ? new Date(backup.createdAt).toLocaleString() : 'Unknown date'}
+                                    {backup?.fileSizeKB && ` • ${backup.fileSizeKB} KB`}
+                                  </>
+                                }
+                              />
+                            </ListItem>
+                            {index < actualBackups.length - 1 && <Divider component="li" />}
+                          </React.Fragment>
+                        ))}
+                      </List>
+                    );
+                  })()}
+                </Box>
               )}
             </Paper>
           </Grid>
@@ -1104,7 +1219,7 @@ const DevPanel = () => {
                 <TableRow>
                   <TableCell colSpan={7} align="center">Loading users...</TableCell>
                 </TableRow>
-              ) : users.length === 0 ? (
+              ) : !Array.isArray(users) || users.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} align="center">No users found</TableCell>
                 </TableRow>
@@ -1112,7 +1227,7 @@ const DevPanel = () => {
                 users.map(user => (
                   <TableRow key={user.id}>
                     <TableCell>{user.id}</TableCell>
-                    <TableCell>{`${user.firstName} ${user.lastName}`}</TableCell>
+                    <TableCell>{`${user.firstName || ''} ${user.lastName || ''}`}</TableCell>
                     <TableCell>{user.email}</TableCell>
                     <TableCell>{user.role}</TableCell>
                     <TableCell>{user.companyId}</TableCell>
@@ -1140,7 +1255,7 @@ const DevPanel = () => {
                       <IconButton 
                         color="error" 
                         size="small"
-                        onClick={() => handleDeleteClick('user', user.id, `${user.firstName} ${user.lastName}`)}
+                        onClick={() => handleDeleteClick('user', user.id, `${user.firstName || ''} ${user.lastName || ''}`)}
                       >
                         <DeleteIcon fontSize="small" />
                       </IconButton>
@@ -1199,7 +1314,7 @@ const DevPanel = () => {
                 <TableRow>
                   <TableCell colSpan={8} align="center">Loading companies...</TableCell>
                 </TableRow>
-              ) : companies.length === 0 ? (
+              ) : !Array.isArray(companies) || companies.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} align="center">No companies found</TableCell>
                 </TableRow>
@@ -1207,11 +1322,11 @@ const DevPanel = () => {
                 companies.map(company => (
                   <TableRow key={company.id}>
                     <TableCell>{company.id}</TableCell>
-                    <TableCell>{company.name}</TableCell>
+                    <TableCell>{company.name || 'Unnamed Company'}</TableCell>
                     <TableCell>{company.email}</TableCell>
                     <TableCell>{company.phone}</TableCell>
                     <TableCell>{company.taxNumber}</TableCell>
-                    <TableCell>{users.filter(u => u.companyId === company.id).length}</TableCell>
+                    <TableCell>{Array.isArray(users) ? users.filter(u => u.companyId === company.id).length : 0}</TableCell>
                     <TableCell>
                       {company.isActive ? (
                         <Box sx={{ color: 'success.main', display: 'flex', alignItems: 'center' }}>
@@ -1236,7 +1351,7 @@ const DevPanel = () => {
                       <IconButton 
                         color="error" 
                         size="small"
-                        onClick={() => handleDeleteClick('company', company.id, company.name)}
+                        onClick={() => handleDeleteClick('company', company.id, company.name || 'Unnamed Company')}
                       >
                         <DeleteIcon fontSize="small" />
                       </IconButton>

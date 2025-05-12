@@ -33,12 +33,15 @@ import {
   Search as SearchIcon,
   Refresh as RefreshIcon,
   PictureAsPdf as PdfIcon,
-  Payment as PaymentIcon
+  Payment as PaymentIcon,
+  Email as EmailIcon
 } from '@mui/icons-material';
 import { invoiceService } from '../services/invoiceService';
 import { customerService } from '../services/customerService';
 import { productService } from '../services/productService';
+import { messageService } from '../services/messageService';
 import { useAppContext } from '../context/AppContext';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const invoiceStatuses = [
   { value: 0, label: 'Draft', color: 'default' },
@@ -60,19 +63,73 @@ const Invoices = () => {
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [openEmailDialog, setOpenEmailDialog] = useState(false);
+  const [emailData, setEmailData] = useState({
+    recipient: '',
+    subject: '',
+    body: ''
+  });
+  const [sendingEmail, setSendingEmail] = useState(false);
+
+  const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchInvoices();
   }, []);
+
+  // Add a new effect to check for selected invoice in URL
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const selectedInvoiceId = searchParams.get('selected');
+    
+    // If there's a selected invoice ID in the URL, fetch and select that invoice
+    if (selectedInvoiceId && invoices.length > 0) {
+      console.log('Selected invoice ID found in URL:', selectedInvoiceId);
+      const invoice = invoices.find(inv => inv.id.toString() === selectedInvoiceId.toString());
+      
+      if (invoice) {
+        console.log('Found matching invoice, selecting it');
+        handleInvoiceSelect(invoice);
+      } else {
+        console.log('Invoice not found in current list, fetching it directly');
+        // Invoice not found in current list, fetch it directly
+        const fetchSelectedInvoice = async () => {
+          try {
+            const result = await invoiceService.getById(selectedInvoiceId);
+            if (result.success && result.data) {
+              handleInvoiceSelect(result.data);
+            } else {
+              showSnackbar('Failed to load selected invoice', 'error');
+            }
+          } catch (err) {
+            console.error('Error fetching selected invoice:', err);
+            showSnackbar('Error loading selected invoice', 'error');
+          }
+        };
+        
+        fetchSelectedInvoice();
+      }
+      
+      // Clear the selected parameter from URL
+      const clearedParams = new URLSearchParams(location.search);
+      clearedParams.delete('selected');
+      window.history.replaceState(
+        {},
+        '',
+        clearedParams.toString() ? `?${clearedParams.toString()}` : window.location.pathname
+      );
+    }
+  }, [location.search, invoices]);
 
   const fetchInvoices = async () => {
     setLoading(true);
     try {
       const result = await invoiceService.getAll();
       if (result.success) {
-        // Ensure invoices is always an array
         const invoiceData = Array.isArray(result.data) ? result.data : [];
-        console.log('Invoice data from API:', invoiceData);
+        console.log('Raw invoice data from API:', JSON.stringify(invoiceData, null, 2));
+        console.log('First invoice items:', invoiceData[0]?.invoiceItems);
         setInvoices(invoiceData);
         setError(null);
       } else {
@@ -100,9 +157,19 @@ const Invoices = () => {
   };
 
   const handleInvoiceSelect = (invoice) => {
-    console.log('Selected invoice:', invoice);
+    console.log('Selected invoice full data:', JSON.stringify(invoice, null, 2));
+    console.log('Invoice items array:', invoice.invoiceItems);
+    console.log('Invoice items length:', invoice.invoiceItems?.length);
     setSelectedInvoice(invoice);
   };
+
+  // Add a new useEffect to monitor selectedInvoice changes
+  useEffect(() => {
+    if (selectedInvoice) {
+      console.log('selectedInvoice state updated:', selectedInvoice);
+      console.log('selectedInvoice.invoiceItems:', selectedInvoice.invoiceItems);
+    }
+  }, [selectedInvoice]);
 
   const handleCloseDetails = () => {
     setSelectedInvoice(null);
@@ -312,6 +379,81 @@ const Invoices = () => {
     return dueDate < today;
   };
 
+  // Function to open the email dialog
+  const handleEmailInvoice = () => {
+    if (!selectedInvoice) return;
+    
+    // Get customer email if available
+    const customerEmail = selectedInvoice.customerEmail || '';
+    
+    // Format the amount with a null check - check both total and totalAmount
+    const formattedAmount = selectedInvoice.total 
+      ? selectedInvoice.total.toFixed(2) 
+      : (selectedInvoice.totalAmount 
+          ? selectedInvoice.totalAmount.toFixed(2) 
+          : '0.00');
+    
+    // Set default email data
+    setEmailData({
+      recipient: customerEmail,
+      subject: `Invoice #${selectedInvoice.invoiceNumber}`,
+      body: `Dear ${selectedInvoice.customerName},
+
+Please find attached your invoice #${selectedInvoice.invoiceNumber} for the amount of ${formattedAmount} ${selectedInvoice.currency || 'USD'}.
+
+Due date: ${new Date(selectedInvoice.dueDate).toLocaleDateString()}
+
+Thank you for your business.
+
+Best regards,
+${localStorage.getItem('company_name') || 'Our Company'}`
+    });
+    
+    setOpenEmailDialog(true);
+  };
+
+  // Function to send the email with invoice
+  const handleSendEmail = async () => {
+    if (!selectedInvoice || !emailData.recipient) return;
+    
+    try {
+      setSendingEmail(true);
+      
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailData.recipient)) {
+        showSnackbar('Please enter a valid email address', 'error');
+        setSendingEmail(false);
+        return;
+      }
+      
+      // Send the email
+      const result = await messageService.sendInvoiceEmail(
+        selectedInvoice.id,
+        emailData.recipient,
+        emailData.subject,
+        emailData.body
+      );
+      
+      if (result.success) {
+        showSnackbar('Invoice sent successfully via email', 'success');
+        setOpenEmailDialog(false);
+        
+        // Update invoice status to "Sent" if it was in Draft
+        if (selectedInvoice.status === 0) {
+          await handleUpdateStatus(selectedInvoice.id, 1);
+        }
+      } else {
+        showSnackbar(result.message || 'Failed to send invoice email', 'error');
+      }
+    } catch (error) {
+      console.error('Error sending invoice email:', error);
+      showSnackbar('Error sending invoice: ' + (error.message || 'Unknown error'), 'error');
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       {selectedInvoice ? (
@@ -338,6 +480,15 @@ const Invoices = () => {
                 sx={{ mr: 1 }}
               >
                 Download PDF
+              </Button>
+              <Button 
+                variant="outlined" 
+                color="primary"
+                startIcon={<EmailIcon />}
+                onClick={handleEmailInvoice}
+                sx={{ mr: 1 }}
+              >
+                Email Invoice
               </Button>
               {selectedInvoice.status === 1 && (
                 <Button 
@@ -419,42 +570,53 @@ const Invoices = () => {
                     <TableCell>Product</TableCell>
                     <TableCell>Quantity</TableCell>
                     <TableCell>Unit Price</TableCell>
-                    <TableCell>Discount</TableCell>
+                    <TableCell>Tax Rate</TableCell>
+                    <TableCell>Tax Amount</TableCell>
                     <TableCell align="right">Total</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {selectedInvoice.invoiceItems && selectedInvoice.invoiceItems.length > 0 ? (
-                    selectedInvoice.invoiceItems.map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell>{item.productName}</TableCell>
-                        <TableCell>{item.quantity}</TableCell>
-                        <TableCell>{item.unitPrice.toFixed(2)}</TableCell>
-                        <TableCell>{item.discount || 0}%</TableCell>
-                        <TableCell align="right">{item.total.toFixed(2)}</TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={5} align="center">No items found</TableCell>
-                    </TableRow>
-                  )}
+                  {console.log('Rendering invoice items:', selectedInvoice?.invoiceItems)}
+                  {(() => {
+                    // Handle .NET $values serialization
+                    const items = selectedInvoice?.invoiceItems?.$values || selectedInvoice?.invoiceItems;
+                    console.log('Processed items array:', items);
+                    
+                    if (Array.isArray(items) && items.length > 0) {
+                      return items.map((item, index) => (
+                        <TableRow key={index}>
+                          <TableCell>{item.productName || item.product?.name}</TableCell>
+                          <TableCell>{item.quantity}</TableCell>
+                          <TableCell>{item.unitPrice?.toFixed(2)} {selectedInvoice?.currency || 'USD'}</TableCell>
+                          <TableCell>{item.taxRate}%</TableCell>
+                          <TableCell>{item.taxAmount?.toFixed(2)} {selectedInvoice?.currency || 'USD'}</TableCell>
+                          <TableCell align="right">{item.total?.toFixed(2)} {selectedInvoice?.currency || 'USD'}</TableCell>
+                        </TableRow>
+                      ));
+                    } else {
+                      return (
+                        <TableRow>
+                          <TableCell colSpan={6} align="center">No items found</TableCell>
+                        </TableRow>
+                      );
+                    }
+                  })()}
                   <TableRow>
                     <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>Subtotal:</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                      {selectedInvoice.subtotal?.toFixed(2) || '0.00'} {selectedInvoice.currency || 'USD'}
+                    <TableCell colSpan={2} align="right" sx={{ fontWeight: 'bold' }}>
+                      {selectedInvoice?.subtotal?.toFixed(2) || '0.00'} {selectedInvoice?.currency || 'USD'}
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>Tax ({selectedInvoice.taxRate || 0}%):</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                      {selectedInvoice.taxAmount?.toFixed(2) || '0.00'} {selectedInvoice.currency || 'USD'}
+                    <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>Tax ({selectedInvoice?.taxRate || 0}%):</TableCell>
+                    <TableCell colSpan={2} align="right" sx={{ fontWeight: 'bold' }}>
+                      {selectedInvoice?.taxAmount?.toFixed(2) || '0.00'} {selectedInvoice?.currency || 'USD'}
                     </TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>Total:</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                      {selectedInvoice.total?.toFixed(2) || '0.00'} {selectedInvoice.currency || 'USD'}
+                    <TableCell colSpan={2} align="right" sx={{ fontWeight: 'bold' }}>
+                      {selectedInvoice?.total?.toFixed(2) || '0.00'} {selectedInvoice?.currency || 'USD'}
                     </TableCell>
                   </TableRow>
                 </TableBody>
@@ -669,6 +831,64 @@ const Invoices = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+      
+      {/* Email Invoice Dialog */}
+      <Dialog open={openEmailDialog} onClose={() => !sendingEmail && setOpenEmailDialog(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Email Invoice</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Recipient Email"
+                name="recipient"
+                value={emailData.recipient}
+                onChange={(e) => setEmailData({...emailData, recipient: e.target.value})}
+                required
+                disabled={sendingEmail}
+                helperText="Enter the email address to send the invoice to"
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Subject"
+                name="subject"
+                value={emailData.subject}
+                onChange={(e) => setEmailData({...emailData, subject: e.target.value})}
+                disabled={sendingEmail}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Message"
+                name="body"
+                value={emailData.body}
+                onChange={(e) => setEmailData({...emailData, body: e.target.value})}
+                multiline
+                rows={6}
+                disabled={sendingEmail}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setOpenEmailDialog(false)} 
+            disabled={sendingEmail}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSendEmail} 
+            variant="contained" 
+            color="primary"
+            disabled={!emailData.recipient || !emailData.subject || !emailData.body || sendingEmail}
+            startIcon={sendingEmail ? <CircularProgress size={20} /> : <EmailIcon />}
+          >
+            {sendingEmail ? 'Sending...' : 'Send Invoice'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

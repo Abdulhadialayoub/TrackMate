@@ -38,6 +38,7 @@ import {
   ExpandMore,
   ChevronRight,
   Category as CategoryIcon,
+  Email as EmailIcon,
 } from '@mui/icons-material';
 import { authService } from '../../services/api';
 import { motion } from 'framer-motion';
@@ -152,6 +153,7 @@ const AppLayout = () => {
       { text: 'Customers', icon: <PeopleIcon />, path: '/customers' },
       { text: 'Orders', icon: <OrdersIcon />, path: '/orders' },
       { text: 'Invoices', icon: <InvoicesIcon />, path: '/invoices' },
+      { text: 'Messages', icon: <EmailIcon />, path: '/messages' },
     ];
   };
   
