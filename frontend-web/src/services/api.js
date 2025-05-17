@@ -4,7 +4,7 @@ import axios from 'axios';
 const API_CONFIG = {
   // Base URL for API requests
   //https://localhost:7092/api
-  BASE_URL: 'https://localhost:7092/api',
+  BASE_URL: 'http://localhost:5105/api',
   
   // API Endpoints
   ENDPOINTS: {
@@ -345,13 +345,20 @@ export const authService = {
           localStorage.setItem('fullname', `${response.data.user.firstName || ''} ${response.data.user.lastName || ''}`.trim());
         }
         
+        // Store company ID (adding this to match the register function)
+        if (response.data.user.companyId) {
+          localStorage.setItem('company_id', response.data.user.companyId.toString());
+          console.log('Stored company ID:', response.data.user.companyId);
+        }
+        
         // Log stored user info for debugging
         console.log('Stored user info:', {
           user_id: localStorage.getItem('user_id'),
           user_role: localStorage.getItem('user_role'),
           user_name: localStorage.getItem('user_name'),
           username: localStorage.getItem('username'),
-          fullname: localStorage.getItem('fullname')
+          fullname: localStorage.getItem('fullname'),
+          company_id: localStorage.getItem('company_id')
         });
       }
       

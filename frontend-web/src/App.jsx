@@ -25,6 +25,8 @@ import Settings from './components/Settings';
 import { AppProvider, useAppContext } from './context/AppContext';
 import Notifications from './components/common/Notifications';
 import Categories from './components/Categories';
+import OrderAIAnalysis from './components/OrderAIAnalysis';
+import OrdersAIAnalysis from './components/OrdersAIAnalysis';
 
 const theme = createTheme({
   palette: {
@@ -187,6 +189,10 @@ function App() {
               <Route path="/profile" element={<UserProfile />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/categories" element={<Categories />} />
+              
+              {/* AI Analysis routes */}
+              <Route path="/order-analysis/:orderId" element={<OrderAIAnalysis />} />
+              <Route path="/orders-analysis" element={<OrdersAIAnalysis />} />
               
               {/* Dev-only routes */}
               <Route element={<RoleBasedRoute allowedRoles={['Dev']} />}>

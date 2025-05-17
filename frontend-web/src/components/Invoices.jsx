@@ -52,7 +52,7 @@ const invoiceStatuses = [
 ];
 
 const Invoices = () => {
-  const { addNotification } = useAppContext();
+  const { addNotification, companyInfo } = useAppContext();
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -125,12 +125,82 @@ const Invoices = () => {
   const fetchInvoices = async () => {
     setLoading(true);
     try {
-      const result = await invoiceService.getAll();
+      // Get company ID from context or localStorage
+      let currentCompanyId = companyInfo?.id;
+      
+      // If not in context, try to get from localStorage
+      if (!currentCompanyId) {
+        const companyIdFromStorage = localStorage.getItem('company_id');
+        if (companyIdFromStorage) {
+          currentCompanyId = parseInt(companyIdFromStorage, 10);
+          console.log('Got company ID from localStorage:', currentCompanyId);
+        }
+      }
+      
+      console.log('Current company ID for filtering invoices:', currentCompanyId);
+      
+      let result;
+      
+      if (currentCompanyId) {
+        // Use the company-specific endpoint
+        console.log(`Fetching invoices for company ID: ${currentCompanyId}`);
+        result = await invoiceService.getByCompanyId(currentCompanyId);
+      } else {
+        // Fallback to getting all invoices
+        console.warn('No company ID available, fetching all invoices');
+        result = await invoiceService.getAll();
+      }
+      
       if (result.success) {
         const invoiceData = Array.isArray(result.data) ? result.data : [];
-        console.log('Raw invoice data from API:', JSON.stringify(invoiceData, null, 2));
-        console.log('First invoice items:', invoiceData[0]?.invoiceItems);
-        setInvoices(invoiceData);
+        console.log(`Received ${invoiceData.length} invoices from API`);
+        console.log('Full invoice data structure:', JSON.stringify(invoiceData, null, 2));
+        
+        // If we have invoices but they are missing details, fetch each one individually
+        if (invoiceData.length > 0 && 
+            (!invoiceData[0].customer || !invoiceData[0].invoiceItems || 
+             !invoiceData[0].customerName || invoiceData[0].invoiceItems?.length === 0)) {
+          
+          console.log('Invoice data is missing details, fetching individual invoices...');
+          
+          // Fetch complete data for each invoice
+          const detailedInvoices = await Promise.all(
+            invoiceData.map(async (invoice) => {
+              try {
+                const detailResult = await invoiceService.getById(invoice.id);
+                if (detailResult.success) {
+                  console.log(`Got detailed info for invoice #${invoice.invoiceNumber}`);
+                  return detailResult.data;
+                }
+                return invoice; // Fallback to original if fetch fails
+              } catch (err) {
+                console.error(`Error fetching details for invoice ${invoice.id}:`, err);
+                return invoice; // Return original invoice on error
+              }
+            })
+          );
+          
+          console.log('Fetched detailed invoices:', detailedInvoices.length);
+          
+          // Add customer name if missing but we have customer
+          const enhancedInvoices = detailedInvoices.map(invoice => {
+            if (!invoice.customerName && invoice.customer?.name) {
+              invoice.customerName = invoice.customer.name;
+            }
+            
+            // If we have a customer ID but no customer name, add a placeholder
+            if (!invoice.customerName && invoice.customerId) {
+              invoice.customerName = `Customer #${invoice.customerId}`;
+            }
+            
+            return invoice;
+          });
+          
+          setInvoices(enhancedInvoices);
+        } else {
+          setInvoices(invoiceData);
+        }
+        
         setError(null);
       } else {
         setInvoices([]);
@@ -393,10 +463,13 @@ const Invoices = () => {
           ? selectedInvoice.totalAmount.toFixed(2) 
           : '0.00');
     
+    // Get company name from context or localStorage or default
+    const companyName = companyInfo?.name || localStorage.getItem('company_name') || 'Our Company';
+    
     // Set default email data
     setEmailData({
       recipient: customerEmail,
-      subject: `Invoice #${selectedInvoice.invoiceNumber}`,
+      subject: `Invoice #${selectedInvoice.invoiceNumber} from ${companyName}`,
       body: `Dear ${selectedInvoice.customerName},
 
 Please find attached your invoice #${selectedInvoice.invoiceNumber} for the amount of ${formattedAmount} ${selectedInvoice.currency || 'USD'}.
@@ -406,7 +479,7 @@ Due date: ${new Date(selectedInvoice.dueDate).toLocaleDateString()}
 Thank you for your business.
 
 Best regards,
-${localStorage.getItem('company_name') || 'Our Company'}`
+${companyName}`
     });
     
     setOpenEmailDialog(true);
@@ -462,6 +535,11 @@ ${localStorage.getItem('company_name') || 'Our Company'}`
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h4" component="h1" gutterBottom>
               Invoice #{selectedInvoice.invoiceNumber}
+              {companyInfo?.name && (
+                <Typography variant="subtitle1" color="text.secondary">
+                  {companyInfo.name}
+                </Typography>
+              )}
             </Typography>
             <Box>
               <Button 
@@ -514,6 +592,12 @@ ${localStorage.getItem('company_name') || 'Our Company'}`
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
                 <Typography variant="h6" gutterBottom>Invoice Information</Typography>
+                {companyInfo?.name && (
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="subtitle2">From:</Typography>
+                    <Typography>{companyInfo.name}</Typography>
+                  </Box>
+                )}
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="subtitle2">Customer:</Typography>
                   <Typography>{selectedInvoice.customerName}</Typography>
@@ -635,9 +719,16 @@ ${localStorage.getItem('company_name') || 'Our Company'}`
         // Invoices list view
         <>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h4" component="h1" gutterBottom>
-              Invoices Management
-            </Typography>
+            <Box>
+              <Typography variant="h4" component="h1" gutterBottom>
+                Invoices Management
+              </Typography>
+              {companyInfo?.name && (
+                <Typography variant="subtitle1" color="text.secondary">
+                  {companyInfo.name}
+                </Typography>
+              )}
+            </Box>
             <Button 
               variant="contained" 
               color="primary" 

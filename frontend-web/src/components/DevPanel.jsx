@@ -51,7 +51,7 @@ import {
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
-const apiBaseUrl = 'https://localhost:7092/api'; // Make sure this matches your backend URL
+const apiBaseUrl = 'http://localhost:5105/api'; // Make sure this matches your backend URL
 
 const api = axios.create({
   baseURL: apiBaseUrl,

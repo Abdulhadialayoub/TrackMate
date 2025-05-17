@@ -45,7 +45,8 @@ import {
   ShoppingCart as OrderIcon,
   AddShoppingCart as AddItemIcon,
   RemoveShoppingCart as RemoveItemIcon,
-  ReceiptLong as InvoiceIcon
+  ReceiptLong as InvoiceIcon,
+  Psychology as PsychologyIcon
 } from '@mui/icons-material';
 import { orderService } from '../services/orderService';
 import { customerService } from '../services/customerService';
@@ -53,6 +54,7 @@ import { productService } from '../services/productService';
 import { invoiceService } from '../services/invoiceService';
 import { dashboardService } from '../services/dashboardService';
 import { useNavigate, useLocation } from 'react-router-dom';
+import OrderAIAnalysis from './OrderAIAnalysis';
 
 const orderStatuses = [
   { value: 0, label: 'Draft', color: 'default', stringValue: 'Draft' },
@@ -136,6 +138,7 @@ const Orders = () => {
   const [openInvoiceDialog, setOpenInvoiceDialog] = useState(false);
   const [orderForInvoice, setOrderForInvoice] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [showAIAnalysis, setShowAIAnalysis] = useState(false);
 
   // Initial state for the form data
   const initialFormState = {
@@ -1607,6 +1610,22 @@ const Orders = () => {
               </Button>
               <Button 
                 variant="outlined" 
+                color="info"
+                startIcon={<PsychologyIcon />}
+                onClick={() => {
+                  // Navigate to the standalone AI analysis page
+                  if (selectedOrder && selectedOrder.id) {
+                    navigate(`/order-analysis/${selectedOrder.id}`);
+                  } else {
+                    showSnackbar('No order selected for analysis', 'error');
+                  }
+                }}
+                sx={{ mr: 2 }}
+              >
+                AI Analysis
+              </Button>
+              <Button 
+                variant="outlined" 
                 onClick={handleCloseDetails}
               >
                 Back to Orders
@@ -1734,6 +1753,19 @@ const Orders = () => {
               <Typography>{selectedOrder.notes}</Typography>
             </Paper>
           )}
+          
+          {/* AI Analysis Section */}
+          {showAIAnalysis && (
+            <Paper sx={{ p: 3, mt: 3 }}>
+              <OrderAIAnalysis 
+                orderData={selectedOrder} 
+                onAnalysisComplete={(analysis) => {
+                  console.log('AI analysis completed:', analysis);
+                  // You can store this in state or do something with it if needed
+                }}
+              />
+            </Paper>
+          )}
         </Box>
       ) : (
         // Orders list view
@@ -1760,14 +1792,25 @@ const Orders = () => {
                 </Box>
               )}
             </div>
-            <Button 
-              variant="contained" 
-              color="primary" 
-              startIcon={<AddIcon />}
-              onClick={() => handleOpenDialog()}
-            >
-              New Order
-            </Button>
+            <Box sx={{ display: 'flex' }}>
+              <Button 
+                variant="outlined" 
+                color="info"
+                startIcon={<PsychologyIcon />}
+                onClick={() => navigate('/orders-analysis')}
+                sx={{ mr: 2 }}
+              >
+                Bulk AI Analysis
+              </Button>
+              <Button 
+                variant="contained" 
+                color="primary" 
+                startIcon={<AddIcon />}
+                onClick={() => handleOpenDialog()}
+              >
+                New Order
+              </Button>
+            </Box>
           </Box>
 
           <Paper sx={{ mb: 3, p: 2 }}>
