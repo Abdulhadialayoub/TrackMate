@@ -1,14 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using TrackMate.API.Models.Enums;
+using System.Text.Json.Serialization;
 
 namespace TrackMate.API.Models.DTOs
 {
     public class CustomerDto : BaseDto
     {
-        [Required]
-        public new int CompanyId { get; set; }
-
         [Required]
         [StringLength(100)]
         public string Name { get; set; }
@@ -37,18 +36,18 @@ namespace TrackMate.API.Models.DTOs
 
         public string Notes { get; set; }
 
-        public IEnumerable<OrderDto> Orders { get; set; }
+        // Orders - circular references are handled by ReferenceHandler.Preserve
+        public IEnumerable<OrderDto> Orders { get; set; } = new List<OrderDto>();
 
-        public IEnumerable<InvoiceDto> Invoices { get; set; }
+        // Invoices - circular references are handled by ReferenceHandler.Preserve
+        public IEnumerable<InvoiceDto> Invoices { get; set; } = new List<InvoiceDto>();
 
-        public new bool IsActive { get; set; }
+        // Extra metrics for UI display
         public int OrderCount { get; set; }
         public int InvoiceCount { get; set; }
         public int EmailLogCount { get; set; }
-        public new DateTime CreatedAt { get; set; }
-        public new string CreatedBy { get; set; } = string.Empty;
-        public new DateTime? UpdatedAt { get; set; }
-        public new string? UpdatedBy { get; set; }
+        
+        // Company - circular references are handled by ReferenceHandler.Preserve
         public CompanyDto Company { get; set; }
     }
 

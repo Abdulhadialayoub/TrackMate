@@ -9,6 +9,7 @@ using TrackMate.API.Data;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using TrackMate.API.Models.Entities;
+using TrackMate.API.Models.Enums;
 
 namespace TrackMate.API.Controllers
 {
@@ -208,6 +209,98 @@ namespace TrackMate.API.Controllers
         }
 
         /// <summary>
+        /// Send invoice email with custom message
+        /// </summary>
+        [HttpPost("send-invoice")]
+        public async Task<IActionResult> SendInvoiceWithCustomMessage([FromBody] SendInvoiceEmailDto request)
+        {
+            try
+            {
+                // Check if the user has access to the company
+                if (!await ValidateCompanyAccess(request.CompanyId))
+                {
+                    return Forbid();
+                }
+
+                // Get the invoice to validate it exists
+                var invoice = await _context.Invoices
+                    .Include(i => i.Customer)
+                    .FirstOrDefaultAsync(i => i.Id == request.InvoiceId);
+                    
+                if (invoice == null)
+                {
+                    return NotFound(new ResponseDto<bool>
+                    {
+                        Success = false,
+                        Message = "Invoice not found",
+                        Data = false
+                    });
+                }
+                
+                // Make sure invoice belongs to the requested company
+                if (invoice.CompanyId != request.CompanyId)
+                {
+                    return BadRequest(new ResponseDto<bool>
+                    {
+                        Success = false,
+                        Message = "Invoice does not belong to the specified company",
+                        Data = false
+                    });
+                }
+                
+                bool result = await _emailService.SendCustomInvoiceEmailAsync(
+                    request.InvoiceId,
+                    request.To,
+                    request.Subject,
+                    request.Body,
+                    request.IncludeAttachment);
+
+                if (result)
+                {
+                    // Update invoice status to "Sent" if it was in "Draft"
+                    if (invoice.Status == InvoiceStatus.Draft.ToString()) // Draft status
+                    {
+                        invoice.Status = InvoiceStatus.Sent.ToString(); // Sent status
+                        
+                        // Get username safely or use a default value
+                        string username = User?.Identity?.Name ?? "System";
+                        invoice.UpdatedBy = username;
+                        
+                        invoice.UpdatedAt = DateTime.UtcNow;
+                        await _context.SaveChangesAsync();
+                    }
+                    
+                    return Ok(new ResponseDto<bool>
+                    {
+                        Success = true,
+                        Message = "Invoice email sent successfully",
+                        Data = true
+                    });
+                }
+                else
+                {
+                    return StatusCode(500, new ResponseDto<bool>
+                    {
+                        Success = false,
+                        Message = "Failed to send invoice email",
+                        Data = false
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error sending custom invoice email");
+                return StatusCode(500, new ResponseDto<bool>
+                {
+                    Success = false,
+                    Message = "An error occurred while sending the invoice email",
+                    Errors = new List<string> { ex.Message },
+                    Data = false
+                });
+            }
+        }
+
+        /// <summary>
         /// Get all email logs for a company
         /// </summary>
         [HttpGet("logs")]
@@ -298,5 +391,15 @@ namespace TrackMate.API.Controllers
         public string Body { get; set; }
         public int CompanyId { get; set; }
         public int? CustomerId { get; set; }
+    }
+
+    public class SendInvoiceEmailDto
+    {
+        public int InvoiceId { get; set; }
+        public string To { get; set; }
+        public string Subject { get; set; }
+        public string Body { get; set; }
+        public bool IncludeAttachment { get; set; }
+        public int CompanyId { get; set; }
     }
 } 

@@ -49,7 +49,6 @@ namespace TrackMate.API.Models.Entities
         public virtual ICollection<Customer> Customers { get; set; } = new HashSet<Customer>();
         public virtual ICollection<Product> Products { get; set; } = new HashSet<Product>();
         public virtual ICollection<Order> Orders { get; set; } = new HashSet<Order>();
-        public virtual ICollection<CompanyBankDetail> BankDetails { get; set; } = new HashSet<CompanyBankDetail>();
         public virtual ICollection<EmailLog> EmailLogs { get; set; } = new List<EmailLog>();
         public virtual ICollection<Invoice> Invoices { get; set; } = new HashSet<Invoice>();
         public virtual ICollection<Category> Categories { get; set; } = new HashSet<Category>();
@@ -61,7 +60,6 @@ namespace TrackMate.API.Models.Entities
             Products = new HashSet<Product>();
             Orders = new HashSet<Order>();
             Invoices = new HashSet<Invoice>();
-            BankDetails = new HashSet<CompanyBankDetail>();
         }
     }
 }

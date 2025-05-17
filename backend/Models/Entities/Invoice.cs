@@ -13,7 +13,6 @@ namespace TrackMate.API.Models.Entities
         public DateTime DueDate { get; set; }
         public int CustomerId { get; set; }
         public int? OrderId { get; set; }
-        public int? BankDetailsId { get; set; }
         public decimal Subtotal { get; set; }
         public decimal TaxRate { get; set; }
         public decimal TaxAmount { get; set; }
@@ -23,6 +22,12 @@ namespace TrackMate.API.Models.Entities
         public string Status { get; set; }
         public string Notes { get; set; }
         public DateTime? PaidDate { get; set; }
+        
+        // Shipping Information
+        public string ShippingAddress { get; set; } = string.Empty;
+        public string ShippingMethod { get; set; } = string.Empty;
+        public string TrackingNumber { get; set; } = string.Empty;
+        
         public new string CreatedBy { get; set; }
         
         // PDF ile ilgili alanlar
@@ -35,8 +40,6 @@ namespace TrackMate.API.Models.Entities
         public virtual Customer Customer { get; set; }
         public virtual Order Order { get; set; }
         
-        [ForeignKey("BankDetailsId")]
-        public virtual CompanyBankDetail Bank { get; set; }
         public virtual User CreatedByUser { get; set; }
         public virtual ICollection<InvoiceItem> InvoiceItems { get; set; } = new HashSet<InvoiceItem>();
     }

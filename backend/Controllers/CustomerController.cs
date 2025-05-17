@@ -7,6 +7,7 @@ using TrackMate.API.Models.DTOs;
 using TrackMate.API.Interfaces;
 using TrackMate.API.Exceptions;
 using Microsoft.Extensions.Logging;
+using System.Linq;
 
 namespace TrackMate.API.Controllers
 {
@@ -119,16 +120,64 @@ namespace TrackMate.API.Controllers
         [HttpGet("{id}/orders")]
         public async Task<ActionResult<IEnumerable<OrderDto>>> GetCustomerOrders(int id)
         {
-            var customer = await _customerService.GetByIdAsync(id);
-            if (customer == null)
+            try
             {
-                return NotFound(new { message = "Customer not found", code = "CUSTOMER_NOT_FOUND" });
-            }
+                _logger.LogInformation("Fetching orders for customer: {Id}", id);
+                
+                var customer = await _customerService.GetByIdAsync(id);
+                if (customer == null)
+                {
+                    return NotFound(new { message = "Customer not found", code = "CUSTOMER_NOT_FOUND" });
+                }
 
-            return await ExecuteWithValidationAsync(
-                customer.CompanyId,
-                async () => await _customerService.GetCustomerOrdersAsync(id)
-            );
+                var orders = await ExecuteWithValidationAsync(
+                    customer.CompanyId,
+                    async () => await _customerService.GetCustomerOrdersAsync(id)
+                );
+                
+                // Sanitize order data like in OrderController
+                if (orders is OkObjectResult okResult && okResult.Value is IEnumerable<OrderDto> orderDtos)
+                {
+                    // Sanitize each order in the collection
+                    var sanitizedOrders = orderDtos.Select(order => {
+                        // Ensure dates are valid
+                        if (order.OrderDate == default)
+                        {
+                            order.OrderDate = DateTime.UtcNow;
+                            _logger.LogWarning("Order {OrderId} had null OrderDate, defaulting to current date", order.Id);
+                        }
+                        
+                        if (order.DueDate == default)
+                        {
+                            order.DueDate = DateTime.UtcNow.AddDays(30);
+                            _logger.LogWarning("Order {OrderId} had null DueDate, defaulting to 30 days from now", order.Id);
+                        }
+                        
+                        // Ensure customer data exists
+                        if (order.Customer == null)
+                        {
+                            order.Customer = new CustomerDto 
+                            { 
+                                Id = id,
+                                Name = customer.Name,
+                                CompanyId = customer.CompanyId
+                            };
+                            _logger.LogWarning("Order {OrderId} had no customer, created using original customer", order.Id);
+                        }
+                        
+                        return order;
+                    }).ToList();
+                    
+                    return Ok(sanitizedOrders);
+                }
+                
+                return orders;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting orders for customer: {Id}", id);
+                return StatusCode(500, new { message = "Failed to get customer orders", error = ex.Message });
+            }
         }
 
         [HttpGet("{id}/invoices")]

@@ -29,7 +29,7 @@ namespace TrackMate.API.Models.DTOs
         [StringLength(100)]
         public string Website { get; set; }
 
-        public IEnumerable<CompanyBankDetailDto> BankDetails { get; set; }
+        
     }
 
     public class CreateCompanyDto

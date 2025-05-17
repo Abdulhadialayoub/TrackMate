@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using TrackMate.API.Models.Enums;
+using System.Text.Json.Serialization;
 
 namespace TrackMate.API.Models.DTOs
 {
@@ -15,7 +16,7 @@ namespace TrackMate.API.Models.DTOs
         public int CustomerId { get; set; }
 
         [Required]
-        [StringLength(50)]
+        [StringLength(150)]
         public string OrderNumber { get; set; }
 
         [Required]
@@ -28,7 +29,13 @@ namespace TrackMate.API.Models.DTOs
         public decimal SubTotal { get; set; }
 
         [Required]
+        public decimal TaxRate { get; set; }
+
+        [Required]
         public decimal TaxAmount { get; set; }
+
+        [Required]
+        public decimal ShippingCost { get; set; }
 
         [Required]
         public decimal TotalAmount { get; set; }
@@ -37,10 +44,24 @@ namespace TrackMate.API.Models.DTOs
         public OrderStatus Status { get; set; }
 
         public string Notes { get; set; }
+        
+        public string Currency { get; set; }
+        
+        // Shipping information fields
+        public string ShippingAddress { get; set; }
+        public string ShippingMethod { get; set; }
+        public string TrackingNumber { get; set; }
 
         public IEnumerable<OrderItemDto> Items { get; set; }
 
+        // Customer reference - circular references are handled by ReferenceHandler.Preserve
         public CustomerDto Customer { get; set; }
+        
+        // Enhanced customer name property with fallback mechanisms
+        [JsonPropertyName("customerName")]
+        public string CustomerName => 
+            Customer?.Name ?? 
+            (CustomerId > 0 ? $"Customer #{CustomerId}" : "Unknown Customer");
     }
 
     public class CreateOrderDto
@@ -67,6 +88,11 @@ namespace TrackMate.API.Models.DTOs
 
         public string Notes { get; set; }
         
+        // Shipping information
+        public string ShippingAddress { get; set; }
+        public string ShippingMethod { get; set; }
+        public string TrackingNumber { get; set; }
+        
         public string CreatedBy { get; set; } = string.Empty;
 
         public IEnumerable<CreateOrderItemDto> Items { get; set; }
@@ -89,6 +115,11 @@ namespace TrackMate.API.Models.DTOs
         public OrderStatus Status { get; set; }
 
         public string Notes { get; set; }
+        
+        // Shipping information
+        public string ShippingAddress { get; set; }
+        public string ShippingMethod { get; set; }
+        public string TrackingNumber { get; set; }
         
         public string UpdatedBy { get; set; } = string.Empty;
 
