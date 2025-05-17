@@ -5,6 +5,44 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AuthContext } from '../../context/AuthContext';
 import { dashboardService } from '../../services';
 
+// Sipariş durumu enum değerini okunabilir metne dönüştür
+const getOrderStatusLabel = (status) => {
+  // Eğer status bir sayıysa veya sayısal string ise
+  const numStatus = typeof status === 'string' ? parseInt(status, 10) : status;
+  
+  if (typeof numStatus === 'number' && !isNaN(numStatus)) {
+    switch (numStatus) {
+      case 0: return 'Draft';
+      case 1: return 'Pending'; 
+      case 2: return 'Confirmed';
+      case 3: return 'Shipped';
+      case 4: return 'Delivered';
+      case 5: return 'Cancelled';
+      case 6: return 'Completed';
+      default: return 'Unknown';
+    }
+  }
+  
+  // Eğer status zaten string ise ve enum değil ise
+  return status || 'Unknown';
+};
+
+// Durum stilini belirle
+const getStatusStyle = (status) => {
+  const numStatus = typeof status === 'string' ? parseInt(status, 10) : status;
+  
+  // Sayısal değere göre stil belirle
+  if (numStatus === 4 || numStatus === 6) { // Delivered veya Completed
+    return styles.statusCompleted;
+  } else if (numStatus === 2 || numStatus === 3) { // Confirmed veya Shipped
+    return styles.statusProcessing;
+  } else if (numStatus === 5) { // Cancelled
+    return styles.statusCancelled;
+  } else {
+    return styles.statusPending; // Draft, Pending veya diğerleri
+  }
+};
+
 const DashboardScreen = ({ navigation }) => {
   const { user } = useContext(AuthContext);
   const [stats, setStats] = useState({
@@ -153,12 +191,10 @@ const DashboardScreen = ({ navigation }) => {
               <View style={styles.orderHeader}>
                 <Title style={styles.orderCustomer}>{order.customerName}</Title>
                 <View style={[
-                  styles.statusBadge, 
-                  order.status === 'Completed' ? styles.statusCompleted : 
-                  order.status === 'Processing' ? styles.statusProcessing : 
-                  styles.statusPending
+                  styles.statusBadge,
+                  getStatusStyle(order.status)
                 ]}>
-                  <Text style={styles.statusText}>{order.status}</Text>
+                  <Text style={styles.statusText}>{getOrderStatusLabel(order.status)}</Text>
                 </View>
               </View>
               <View style={styles.orderDetails}>
@@ -322,6 +358,9 @@ const styles = StyleSheet.create({
   },
   statusPending: {
     backgroundColor: '#fef3c7',
+  },
+  statusCancelled: {
+    backgroundColor: '#fef2f2',
   },
   statusText: {
     fontSize: 12,

@@ -4,20 +4,22 @@ import api, {
   userService,
   productService,
   customerService,
-  invoiceService,
   categoryService,
   dashboardService,
   devPanelService,
+  messageService,
   updateApiBaseUrl
 } from './api';
 
-// Import our standalone orderService
+// Import our standalone services
 import { orderService, getStatusStringFromValue } from './orderService';
-
+import { invoiceService } from './invoiceService';
+import {aiService} from './aiService';
 // Export everything
 export {
   api,
   authService,
+  aiService,
   userService,
   productService,
   customerService,
@@ -27,5 +29,7 @@ export {
   categoryService,
   dashboardService,
   devPanelService,
+  messageService,
   updateApiBaseUrl
 };
+

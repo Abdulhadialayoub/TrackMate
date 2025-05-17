@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { Text, Card, Title, Paragraph, Button, ActivityIndicator, Divider, Chip, Badge, Menu, IconButton } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { orderService } from '../../services';
+import { orderService, invoiceService } from '../../services';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getStatusName, getStatusColor as getOrderStatusColor, ORDER_STATUS } from '../../utils/orderUtils';
 
 const OrderDetailsScreen = ({ route, navigation }) => {
   const { orderId } = route.params;
@@ -13,6 +14,8 @@ const OrderDetailsScreen = ({ route, navigation }) => {
   const [error, setError] = useState(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [orderTotal, setOrderTotal] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [creatingInvoice, setCreatingInvoice] = useState(false);
 
   useEffect(() => {
     fetchOrderDetails();
@@ -64,15 +67,18 @@ const OrderDetailsScreen = ({ route, navigation }) => {
       
       // Ensure numeric status value
       let statusValue = newStatus;
-      if (typeof newStatus === 'string') {
+      if (typeof newStatus === 'string' && !isNaN(parseInt(newStatus))) {
+        statusValue = parseInt(newStatus);
+      } else if (typeof newStatus === 'string') {
+        // Use the ORDER_STATUS values
         switch (newStatus.toLowerCase()) {
-          case 'draft': statusValue = 0; break;
-          case 'pending': statusValue = 1; break;
-          case 'confirmed': statusValue = 2; break;
-          case 'shipped': statusValue = 3; break;
-          case 'delivered': statusValue = 4; break;
-          case 'cancelled': statusValue = 5; break;
-          case 'completed': statusValue = 6; break;
+          case 'draft': statusValue = ORDER_STATUS.DRAFT; break;
+          case 'pending': statusValue = ORDER_STATUS.PENDING; break;
+          case 'confirmed': statusValue = ORDER_STATUS.CONFIRMED; break;
+          case 'shipped': statusValue = ORDER_STATUS.SHIPPED; break;
+          case 'delivered': statusValue = ORDER_STATUS.DELIVERED; break;
+          case 'cancelled': statusValue = ORDER_STATUS.CANCELLED; break;
+          case 'completed': statusValue = ORDER_STATUS.COMPLETED; break;
         }
       }
 
@@ -107,54 +113,81 @@ const OrderDetailsScreen = ({ route, navigation }) => {
     }
   };
 
-  const getStatusColor = (status) => {
-    // Convert to number if it's a string
-    const statusNum = typeof status === 'string' && !isNaN(parseInt(status))
-      ? parseInt(status)
-      : status;
+  const handleDeleteOrder = () => {
+    Alert.alert(
+      'Siparişi Sil',
+      'Bu siparişi silmek istediğinizden emin misiniz?',
+      [
+        {
+          text: 'İptal',
+          style: 'cancel'
+        },
+        {
+          text: 'Sil',
+          style: 'destructive',
+          onPress: confirmDeleteOrder
+        }
+      ]
+    );
+  };
+
+  const confirmDeleteOrder = async () => {
+    try {
+      setIsDeleting(true);
+      const result = await orderService.delete(orderId);
       
-    switch (statusNum) {
-      case 0: // Draft
-        return '#6b7280'; // gray-500
-      case 1: // Pending
-        return '#f59e0b'; // amber-500
-      case 2: // Confirmed
-        return '#3b82f6'; // blue-500
-      case 3: // Shipped
-        return '#8b5cf6'; // purple-500
-      case 4: // Delivered
-        return '#10b981'; // emerald-500
-      case 5: // Cancelled
-        return '#ef4444'; // red-500
-      case 6: // Completed
-        return '#059669'; // emerald-600
-      default:
-        return '#6b7280'; // gray-500
+      if (result.success) {
+        Alert.alert('Başarılı', 'Sipariş başarıyla silindi', [
+          { text: 'Tamam', onPress: () => navigation.goBack() }
+        ]);
+      } else {
+        Alert.alert('Hata', result.message || 'Sipariş silinemedi');
+        setIsDeleting(false);
+      }
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      Alert.alert('Hata', 'Sipariş silinirken bir hata oluştu');
+      setIsDeleting(false);
     }
   };
 
-  const getStatusLabel = (status) => {
-    // Convert numeric status to string label
-    if (typeof status === 'number') {
-      switch (status) {
-        case 0: return 'Draft';
-        case 1: return 'Pending';
-        case 2: return 'Confirmed';
-        case 3: return 'Shipped';
-        case 4: return 'Delivered';
-        case 5: return 'Cancelled';
-        case 6: return 'Completed';
-        default: return 'Unknown';
+  const handleCreateInvoice = async () => {
+    try {
+      setCreatingInvoice(true);
+      
+      const result = await invoiceService.createFromOrder(orderId);
+      
+      if (result.success && result.data) {
+        Alert.alert(
+          'Success', 
+          'Invoice created successfully', 
+          [
+            { 
+              text: 'View Invoice', 
+              onPress: () => navigation.navigate('InvoiceDetails', { invoiceId: result.data.id }) 
+            },
+            { 
+              text: 'OK' 
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Error', result.message || 'Failed to create invoice');
       }
+    } catch (error) {
+      console.error('Error creating invoice:', error);
+      Alert.alert('Error', 'An error occurred while creating the invoice');
+    } finally {
+      setCreatingInvoice(false);
     }
-    
-    // If it's a string that looks like a number, convert it
-    if (typeof status === 'string' && !isNaN(Number(status))) {
-      return getStatusLabel(Number(status));
-    }
-    
-    // Otherwise, return the string status
-    return status || 'Unknown';
+  };
+
+  const getStatusColor = (status) => {
+    return getOrderStatusColor(status);
+  };
+
+  const getStatusLabel = (status) => {
+    return getStatusName(status);
   };
 
   if (loading) {
@@ -162,6 +195,24 @@ const OrderDetailsScreen = ({ route, navigation }) => {
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#0284c7" />
         <Text style={{ marginTop: 10 }}>Loading order details...</Text>
+      </View>
+    );
+  }
+
+  if (isDeleting) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#ef4444" />
+        <Text style={{ marginTop: 10 }}>Sipariş siliniyor...</Text>
+      </View>
+    );
+  }
+
+  if (creatingInvoice) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0284c7" />
+        <Text style={{ marginTop: 10 }}>Creating invoice...</Text>
       </View>
     );
   }
@@ -299,43 +350,33 @@ const OrderDetailsScreen = ({ route, navigation }) => {
           
           <Divider style={[styles.divider, styles.totalDivider]} />
           
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Subtotal</Text>
-            <Text style={styles.totalAmount}>
-              ${((order.subtotal || order.subTotal || orderTotal) || 0).toFixed(2)}
-            </Text>
-          </View>
-          
-          {(order.taxRate > 0 || order.tax > 0 || order.taxAmount > 0) && (
+          <View style={styles.totalsSection}>
             <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>
-                Tax {order.taxRate > 0 ? `(${order.taxRate}%)` : ''}
+              <Text style={styles.totalLabel}>Subtotal:</Text>
+              <Text style={styles.totalValue}>${order.subTotal?.toFixed(2) || orderTotal.toFixed(2)}</Text>
+            </View>
+            {
+              order.taxRate > 0 && (
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalLabel}>Tax ({order.taxRate}%):</Text>
+                  <Text style={styles.totalValue}>${order.taxAmount?.toFixed(2) || (orderTotal * (order.taxRate / 100)).toFixed(2)}</Text>
+                </View>
+              )
+            }
+            {
+              order.shippingCost > 0 && (
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalLabel}>Shipping:</Text>
+                  <Text style={styles.totalValue}>${order.shippingCost?.toFixed(2) || '0.00'}</Text>
+                </View>
+              )
+            }
+            <View style={styles.totalRow}>
+              <Text style={styles.grandTotalLabel}>Total:</Text>
+              <Text style={styles.grandTotalValue}>
+                ${order.total?.toFixed(2) || (orderTotal + (order.shippingCost || 0)).toFixed(2)} {order.currency}
               </Text>
-              <Text style={styles.totalAmount}>
-                ${((order.tax || order.taxAmount || ((orderTotal * (order.taxRate || 0)) / 100)) || 0).toFixed(2)}
-              </Text>
             </View>
-          )}
-          
-          {(order.shippingCost > 0) && (
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Shipping</Text>
-              <Text style={styles.totalAmount}>${(order.shippingCost || 0).toFixed(2)}</Text>
-            </View>
-          )}
-          
-          {(order.discount > 0) && (
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Discount</Text>
-              <Text style={[styles.totalAmount, styles.discountText]}>-${(order.discount || 0).toFixed(2)}</Text>
-            </View>
-          )}
-          
-          <View style={[styles.totalRow, styles.grandTotalRow]}>
-            <Text style={styles.grandTotalLabel}>Total</Text>
-            <Text style={styles.grandTotalAmount}>
-              ${((order.total || order.totalAmount || orderTotal) || 0).toFixed(2)} {order.currency || 'USD'}
-            </Text>
           </View>
         </Card.Content>
       </Card>
@@ -366,38 +407,52 @@ const OrderDetailsScreen = ({ route, navigation }) => {
         </Card.Content>
       </Card>
 
-      <View style={styles.actionButtons}>
-        <Button 
-          mode="contained" 
-          icon="square-edit-outline" 
-          onPress={() => navigation.navigate('NewOrder', { orderId: orderId })}
-          style={styles.actionButton}
-          color="#0284c7"
-        >
-          Edit Order
-        </Button>
-        <Button 
-          mode="outlined" 
-          icon="file-document-outline" 
-          onPress={() => Alert.alert('Generate Invoice', 'Would you like to create an invoice for this order?', [
-            { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Create Invoice',
-              onPress: () => navigation.navigate('CommonScreens', {
-                screen: 'InvoiceDetails',
-                params: {
-                  orderId: orderId,
-                  createFromOrder: true
-                }
-              })
-            }
-          ])}
-          style={styles.actionButton}
-          color="#0284c7"
-        >
-          Generate Invoice
-        </Button>
-      </View>
+      <Card style={styles.card}>
+        <Card.Content>
+          <View style={styles.actionButtons}>
+            <Button 
+              mode="outlined" 
+              icon="pencil" 
+              onPress={() => navigation.navigate('NewOrder', { isEditing: true, orderId: order.id })}
+              style={styles.editButton}
+            >
+              Edit
+            </Button>
+            
+            <Button 
+              mode="outlined" 
+              icon="delete" 
+              onPress={handleDeleteOrder}
+              style={styles.deleteButton}
+              color="#ef4444"
+            >
+              Delete
+            </Button>
+
+            <Button 
+              mode="contained" 
+              icon="file-document-outline" 
+              onPress={handleCreateInvoice}
+              style={styles.invoiceButton}
+              color="#0284c7"
+            >
+              Create Invoice
+            </Button>
+            
+            <Button 
+              mode="contained" 
+              icon="brain" 
+              onPress={() => navigation.navigate('OrderAIAnalysis', { orderId: order.id })}
+              style={styles.aiAnalysisButton}
+              color="#6366f1"
+            >
+              AI Analysis
+            </Button>
+          </View>
+        </Card.Content>
+      </Card>
+
+      <View style={styles.bottomSpace} />
     </ScrollView>
   );
 };
@@ -519,77 +574,78 @@ const styles = StyleSheet.create({
   },
   itemTotal: {
     flex: 0.8,
-    fontWeight: 'bold',
-    textAlign: 'right',
     fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'right',
   },
-  totalDivider: {
-    marginTop: 16,
-    marginBottom: 16,
-    height: 1,
-    backgroundColor: '#0284c7',
-  },
-  totalRow: {
+  itemsHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 8,
+    paddingHorizontal: 4,
   },
-  totalLabel: {
-    fontSize: 14,
-    color: '#4b5563',
-  },
-  totalAmount: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  grandTotalRow: {
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    marginTop: 8,
-  },
-  grandTotalLabel: {
-    fontSize: 16,
+  itemHeader: {
+    fontSize: 12,
+    color: '#6b7280',
     fontWeight: 'bold',
-    color: '#0284c7',
-  },
-  grandTotalAmount: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#0284c7',
-  },
-  discountText: {
-    color: '#ef4444',
-  },
-  paymentInfo: {
-    marginTop: 8,
-  },
-  actionButtons: {
-    flexDirection: 'column',
-    padding: 16,
-    marginBottom: 16,
-  },
-  actionButton: {
-    marginBottom: 8,
   },
   noItemsText: {
     fontStyle: 'italic',
     color: '#6b7280',
     textAlign: 'center',
-    padding: 16,
+    marginVertical: 16,
   },
-  itemsHeaderRow: {
+  totalDivider: {
+    backgroundColor: '#d1d5db',
+    height: 1.5,
+  },
+  totalsSection: {
+    marginTop: 8,
+  },
+  totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    marginVertical: 4,
+  },
+  totalLabel: {
+    color: '#6b7280',
+  },
+  totalValue: {
+    color: '#4b5563',
+    fontWeight: '500',
+  },
+  grandTotalLabel: {
+    color: '#1f2937',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  grandTotalValue: {
+    color: '#0284c7',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  bottomSpace: {
+    height: 24,
+  },
+  actionButtons: {
+    flexDirection: 'column',
+    gap: 8,
+  },
+  editButton: {
     marginBottom: 8,
   },
-  itemHeader: {
-    fontWeight: 'bold',
-    color: '#6b7280',
-    fontSize: 12,
+  deleteButton: {
+    marginBottom: 8,
+    borderColor: '#ef4444',
+  },
+  invoiceButton: {
+    marginBottom: 8,
+  },
+  aiAnalysisButton: {
+    marginBottom: 8,
+  },
+  paymentInfo: {
+    marginTop: 8,
   },
 });
 

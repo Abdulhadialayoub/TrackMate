@@ -33,7 +33,7 @@ const NewProductScreen = ({ navigation, route }) => {
     weight: '',
     quantity: '',
     stockQuantity: '',
-    categoryId: '',
+    categoryId: null,
     brand: '',
     model: '',
     currency: 'USD',
@@ -60,6 +60,19 @@ const NewProductScreen = ({ navigation, route }) => {
       // Handle nested data structure
       const productData = existingProduct.data || existingProduct;
       
+      // Ensure categoryId is a valid number
+      let categoryIdValue = null;
+      if (productData.categoryId) {
+        // Make sure it's a number
+        categoryIdValue = Number(productData.categoryId);
+        // If it's a valid number, convert to string for the form
+        if (!isNaN(categoryIdValue) && categoryIdValue > 0) {
+          categoryIdValue = categoryIdValue.toString();
+        } else {
+          categoryIdValue = null;
+        }
+      }
+      
       setFormData({
         name: productData.name || '',
         description: productData.description || '',
@@ -69,7 +82,7 @@ const NewProductScreen = ({ navigation, route }) => {
         weight: productData.weight ? productData.weight.toString() : '',
         quantity: productData.quantity ? productData.quantity.toString() : '',
         stockQuantity: productData.stockQuantity ? productData.stockQuantity.toString() : '',
-        categoryId: productData.categoryId ? productData.categoryId.toString() : '',
+        categoryId: categoryIdValue,
         brand: productData.brand || '',
         model: productData.model || '',
         currency: productData.currency || 'USD',
@@ -132,6 +145,8 @@ const NewProductScreen = ({ navigation, route }) => {
     
     if (!formData.categoryId) {
       newErrors.categoryId = 'Category is required';
+    } else if (formData.categoryId === '') {
+      newErrors.categoryId = 'Please select a valid category';
     }
     
     if (formData.stockQuantity && isNaN(parseInt(formData.stockQuantity))) {
@@ -152,6 +167,17 @@ const NewProductScreen = ({ navigation, route }) => {
     try {
       setLoading(true);
       
+      // Ensure categoryId is not an empty string
+      if (!formData.categoryId || formData.categoryId === '') {
+        setErrors({
+          ...errors,
+          categoryId: 'Category is required'
+        });
+        setLoading(false);
+        return;
+      }
+      
+      // Format the data properly - ensure all numeric fields are properly parsed
       const productData = {
         name: formData.name,
         description: formData.description,
@@ -161,11 +187,12 @@ const NewProductScreen = ({ navigation, route }) => {
         weight: formData.weight ? parseFloat(formData.weight) : 0,
         quantity: formData.quantity ? parseInt(formData.quantity) : 0,
         stockQuantity: formData.stockQuantity ? parseInt(formData.stockQuantity) : 0,
-        categoryId: parseInt(formData.categoryId),
+        // Ensure categoryId is an integer, not a string
+        categoryId: parseInt(formData.categoryId, 10),
         brand: formData.brand,
         model: formData.model,
         currency: formData.currency,
-        status: formData.status,
+        status: parseInt(formData.status, 10),
         sku: formData.sku,
         isActive: formData.isActive
       };
@@ -175,7 +202,7 @@ const NewProductScreen = ({ navigation, route }) => {
       const userId = await AsyncStorage.getItem('user_id');
       
       if (companyId) {
-        productData.companyId = parseInt(companyId);
+        productData.companyId = parseInt(companyId, 10);
       }
       
       if (userId) {
@@ -183,15 +210,117 @@ const NewProductScreen = ({ navigation, route }) => {
         productData.updatedBy = userId;
       }
       
+      // Create a special direct access payload with explicit types
+      const directApiPayload = {
+        name: String(productData.name || ''),
+        description: String(productData.description || ''),
+        code: String(productData.code || ''),
+        unitPrice: Number(productData.unitPrice || 0),
+        unit: String(productData.unit || ''),
+        weight: Number(productData.weight || 0),
+        quantity: Number(productData.quantity || 0),
+        stockQuantity: Number(productData.stockQuantity || 0),
+        // Instead of categoryId, the DTO expects a Category string property
+        category: String(productData.categoryId || ''), // Match the DTO structure
+        brand: String(productData.brand || ''),
+        model: String(productData.model || ''),
+        currency: String(productData.currency || 'USD'),
+        status: Number(productData.status || 0),
+        sku: String(productData.sku || ''),
+        isActive: Boolean(productData.isActive),
+        companyId: Number(productData.companyId || 0),
+        createdBy: String(productData.createdBy || ''),
+        updatedBy: String(productData.updatedBy || '')
+      };
+      
+      // Log the exact data being sent to the API
+      console.log('Sending product data to API:', JSON.stringify(directApiPayload, null, 2));
+      
       let response;
       
       if (editMode) {
         // Update existing product
         const productId = existingProduct.id || existingProduct.data?.id;
-        response = await productService.update(productId, productData);
+        
+        // Try using the direct API call approach
+        try {
+          // Import api directly in this function to avoid circular dependencies
+          const { api } = require('../../services/api');
+          
+          const directResponse = await api.put(`/Product/${productId}`, directApiPayload);
+          
+          response = {
+            success: true,
+            data: directResponse.data
+          };
+        } catch (directApiError) {
+          console.error('Direct API call failed:', directApiError);
+          
+          // Log more detailed error information
+          if (directApiError.response) {
+            console.error('API Error Response:', {
+              status: directApiError.response.status,
+              data: directApiError.response.data,
+              headers: directApiError.response.headers
+            });
+            
+            // Show a more descriptive error message
+            showSnackbar(
+              directApiError.response.data?.message || 
+              `Failed to update product (${directApiError.response.status})`, 
+              'error'
+            );
+          } else if (directApiError.request) {
+            console.error('No response received:', directApiError.request);
+            showSnackbar('No response received from server', 'error');
+          } else {
+            console.error('Error setting up request:', directApiError.message);
+            showSnackbar('Error setting up request', 'error');
+          }
+          
+          // Fall back to using the service
+          response = await productService.update(productId, productData);
+        }
       } else {
-        // Create new product
-        response = await productService.create(productData);
+        // Create new product - try direct API call first
+        try {
+          // Import api directly in this function to avoid circular dependencies
+          const { api } = require('../../services/api');
+          
+          const directResponse = await api.post('/Product', directApiPayload);
+          
+          response = {
+            success: true,
+            data: directResponse.data
+          };
+        } catch (directApiError) {
+          console.error('Direct API call failed:', directApiError);
+          
+          // Log more detailed error information
+          if (directApiError.response) {
+            console.error('API Error Response:', {
+              status: directApiError.response.status,
+              data: directApiError.response.data,
+              headers: directApiError.response.headers
+            });
+            
+            // Show a more descriptive error message
+            showSnackbar(
+              directApiError.response.data?.message || 
+              `Failed to create product (${directApiError.response.status})`, 
+              'error'
+            );
+          } else if (directApiError.request) {
+            console.error('No response received:', directApiError.request);
+            showSnackbar('No response received from server', 'error');
+          } else {
+            console.error('Error setting up request:', directApiError.message);
+            showSnackbar('Error setting up request', 'error');
+          }
+          
+          // Fall back to using the service
+          response = await productService.create(productData);
+        }
       }
       
       if (response && response.success) {
@@ -262,7 +391,14 @@ const NewProductScreen = ({ navigation, route }) => {
         <View style={[styles.pickerContainer, errors.categoryId ? styles.pickerError : null]}>
           <Picker
             selectedValue={formData.categoryId}
-            onValueChange={(value) => handleChange('categoryId', value)}
+            onValueChange={(value) => {
+              // Ensure we never store empty string as categoryId
+              if (value === '') {
+                handleChange('categoryId', null);
+              } else {
+                handleChange('categoryId', value);
+              }
+            }}
             style={styles.picker}
             enabled={!loadingCategories}
           >

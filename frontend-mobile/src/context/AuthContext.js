@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService } from '../services/api';
+import { STORAGE_KEYS, KEYS_TO_CLEAR_ON_LOGOUT } from '../config/constants';
 
 export const AuthContext = createContext();
 
@@ -13,8 +14,8 @@ export const AuthProvider = ({ children }) => {
     // Uygulama başladığında kullanıcı oturumunu kontrol et
     const checkUserSession = async () => {
       try {
-        const userJson = await AsyncStorage.getItem('user');
-        const storedToken = await AsyncStorage.getItem('token');
+        const userJson = await AsyncStorage.getItem(STORAGE_KEYS.USER_DATA);
+        const storedToken = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
         
         if (userJson && storedToken) {
           setUser(JSON.parse(userJson));
@@ -47,8 +48,17 @@ export const AuthProvider = ({ children }) => {
       const data = await authService.login(email, password);
       
       // Token ve kullanıcı bilgilerini kaydet
-      await AsyncStorage.setItem('token', data.token);
-      await AsyncStorage.setItem('user', JSON.stringify(data.user));
+      await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, data.token);
+      await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(data.user));
+      
+      // Username and company ID için ayrıca sakla
+      if (data.user.username || data.user.email) {
+        await AsyncStorage.setItem(STORAGE_KEYS.USERNAME, data.user.username || data.user.email);
+      }
+      
+      if (data.user.companyId) {
+        await AsyncStorage.setItem(STORAGE_KEYS.COMPANY_ID, data.user.companyId.toString());
+      }
       
       setToken(data.token);
       setUser(data.user);
@@ -70,8 +80,17 @@ export const AuthProvider = ({ children }) => {
       const data = await authService.register(userData);
       
       // Token ve kullanıcı bilgilerini kaydet
-      await AsyncStorage.setItem('token', data.token);
-      await AsyncStorage.setItem('user', JSON.stringify(data.user));
+      await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, data.token);
+      await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(data.user));
+      
+      // Username and company ID için ayrıca sakla
+      if (data.user.username || data.user.email) {
+        await AsyncStorage.setItem(STORAGE_KEYS.USERNAME, data.user.username || data.user.email);
+      }
+      
+      if (data.user.companyId) {
+        await AsyncStorage.setItem(STORAGE_KEYS.COMPANY_ID, data.user.companyId.toString());
+      }
       
       setToken(data.token);
       setUser(data.user);
@@ -89,9 +108,10 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true);
       
-      // Token ve kullanıcı bilgilerini temizle
-      await AsyncStorage.removeItem('token');
-      await AsyncStorage.removeItem('user');
+      // Tüm gerekli verileri temizle
+      for (const key of KEYS_TO_CLEAR_ON_LOGOUT) {
+        await AsyncStorage.removeItem(key);
+      }
       
       setToken(null);
       setUser(null);

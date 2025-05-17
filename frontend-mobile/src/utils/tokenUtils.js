@@ -1,6 +1,7 @@
 // Token utility functions for React Native
 import { Buffer } from 'buffer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { STORAGE_KEYS } from '../config/constants';
 
 /**
  * Decode a JWT token and extract the payload
@@ -36,7 +37,7 @@ export const decodeJWT = (token) => {
  */
 export const extractUsernameFromToken = async () => {
   try {
-    const token = await AsyncStorage.getItem('token');
+    const token = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
     
     if (!token) {
       console.error('No token found in AsyncStorage');
@@ -102,7 +103,7 @@ export const getUserClaimsFromToken = (token) => {
 export const getFullUsernameFromStorage = async () => {
   try {
     // Try to get the username from AsyncStorage directly first
-    let username = await AsyncStorage.getItem('username');
+    let username = await AsyncStorage.getItem(STORAGE_KEYS.USERNAME);
     console.log('Username from AsyncStorage:', username);
     
     // If that fails, try to extract from the token
@@ -113,7 +114,7 @@ export const getFullUsernameFromStorage = async () => {
     
     // Try to get user data from AsyncStorage
     if (!username) {
-      const userJson = await AsyncStorage.getItem('user');
+      const userJson = await AsyncStorage.getItem(STORAGE_KEYS.USER_DATA);
       if (userJson) {
         try {
           const userData = JSON.parse(userJson);

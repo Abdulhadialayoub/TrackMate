@@ -2,10 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
 import { Text, Card, Title, Paragraph, Button, ActivityIndicator, FAB, Snackbar, Chip, Menu, Divider, Portal, Dialog } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { orderService } from '../../services';
+import { orderService, invoiceService } from '../../services';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { STORAGE_KEYS } from '../../config/constants';
+import { getStatusName, getStatusColor } from '../../utils/orderUtils';
 
-const OrdersScreen = ({ navigation }) => {
+const OrdersScreen = ({ navigation, route }) => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -14,6 +16,26 @@ const OrdersScreen = ({ navigation }) => {
   const [filterMode, setFilterMode] = useState('all'); // 'all', 'active', 'completed'
   const [debugDialogVisible, setDebugDialogVisible] = useState(false);
   const [debugData, setDebugData] = useState(null);
+
+  // Check if we are selecting an order for invoice
+  const selectForInvoice = route.params?.selectForInvoice || false;
+
+  // Add title change if selecting for invoice
+  useEffect(() => {
+    if (selectForInvoice) {
+      navigation.setOptions({
+        headerTitle: 'Select Order for Invoice',
+        headerRight: () => (
+          <Button 
+            onPress={() => navigation.goBack()}
+            mode="text"
+          >
+            Cancel
+          </Button>
+        )
+      });
+    }
+  }, [navigation, selectForInvoice]);
 
   const showSnackbar = (message, type = 'info') => {
     setSnackbar({ visible: true, message, type });
@@ -31,7 +53,7 @@ const OrdersScreen = ({ navigation }) => {
     
     try {
       // Get company ID from AsyncStorage
-      const companyId = await AsyncStorage.getItem('company_id');
+      const companyId = await AsyncStorage.getItem(STORAGE_KEYS.COMPANY_ID);
       
       console.log('Fetching orders with company ID:', companyId);
       
@@ -133,47 +155,19 @@ const OrdersScreen = ({ navigation }) => {
 
   // Helper function to determine the status badge style
   const getStatusStyle = (status) => {
-    // Check if status is a number or string
-    const statusValue = typeof status === 'number' 
-      ? status 
-      : typeof status === 'string' && !isNaN(Number(status))
-        ? Number(status)
-        : null;
+    const color = getStatusColor(status);
     
-    if (statusValue === 4 || statusValue === 6 || status === 'Delivered' || status === 'Completed') {
-      return styles.statusCompleted;
-    } else if (statusValue === 2 || statusValue === 3 || status === 'Confirmed' || status === 'Shipped' || status === 'Processing') {
-      return styles.statusProcessing;
-    } else if (statusValue === 5 || status === 'Cancelled') {
-      return styles.statusCancelled;
-    } else {
-      return styles.statusPending;
-    }
+    // Create status style based on color
+    return {
+      backgroundColor: color + '20', // Add transparency
+      borderColor: color,
+      borderWidth: 1
+    };
   };
   
   // Helper function to get status label
   const getStatusLabel = (status) => {
-    // Convert numeric status to string label
-    if (typeof status === 'number') {
-      switch (status) {
-        case 0: return 'Draft';
-        case 1: return 'Pending';
-        case 2: return 'Confirmed';
-        case 3: return 'Shipped';
-        case 4: return 'Delivered';
-        case 5: return 'Cancelled';
-        case 6: return 'Completed';
-        default: return 'Unknown';
-      }
-    }
-    
-    // If it's a string that looks like a number, convert it
-    if (typeof status === 'string' && !isNaN(Number(status))) {
-      return getStatusLabel(Number(status));
-    }
-    
-    // Otherwise, return the string status
-    return status || 'Unknown';
+    return getStatusName(status);
   };
   
   // Filter orders based on selected mode - web version approach
@@ -211,6 +205,59 @@ const OrdersScreen = ({ navigation }) => {
     }
   }, [orders, filterMode]);
 
+  // Modify card press handler to either navigate or create invoice
+  const handleOrderPress = (order) => {
+    if (selectForInvoice) {
+      handleCreateInvoice(order.id);
+    } else {
+      navigation.navigate('OrderDetails', { orderId: order.id });
+    }
+  };
+
+  // Add function to create invoice from order
+  const handleCreateInvoice = async (orderId) => {
+    try {
+      setLoading(true);
+      
+      const result = await invoiceService.createFromOrder(orderId);
+      
+      if (result.success && result.data) {
+        // Log the invoice data to help with debugging
+        console.log('Invoice created successfully:', result.data);
+        showSnackbar('Invoice created successfully', 'success');
+        
+        // Get the invoice ID from the response
+        // Web implementation gets ID from $id if missing
+        let invoiceId = result.data.id;
+        
+        // If no ID field but we have $id, use it (like web implementation)
+        if (!invoiceId && result.data.$id) {
+          invoiceId = result.data.$id;
+          console.log('Using $id as invoice ID:', invoiceId);
+        }
+        
+        // If we have an invoice number but no ID, use it as a fallback (like web)
+        if (!invoiceId && result.data.invoiceNumber) {
+          invoiceId = result.data.invoiceNumber;
+          console.log('Using invoiceNumber as identifier:', invoiceId);
+        }
+        
+        // Navigate to the invoice details screen
+        navigation.navigate('InvoiceDetails', { 
+          // If we found an ID, use it, otherwise pass the entire invoice
+          ...(invoiceId ? { invoiceId } : { invoice: result.data }) 
+        });
+      } else {
+        showSnackbar(result.message || 'Failed to create invoice', 'error');
+      }
+    } catch (error) {
+      console.error('Error creating invoice from order:', error);
+      showSnackbar('Error creating invoice', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
@@ -227,6 +274,24 @@ const OrdersScreen = ({ navigation }) => {
           {filteredOrders.length} {filterMode !== 'all' ? `${filterMode} ` : ''}orders
         </Text>
         <View style={styles.filterActions}>
+          <Button
+            icon="file-document-outline"
+            mode="contained"
+            compact
+            onPress={() => navigation.navigate('InvoiceScreen')}
+            style={styles.invoiceButton}
+          >
+            Invoices
+          </Button>
+          <Button
+            icon="brain"
+            mode="contained"
+            compact
+            onPress={() => navigation.navigate('OrdersAIAnalysis')}
+            style={styles.aiButton}
+          >
+            AI Analysis
+          </Button>
           <Menu
             visible={menuVisible}
             onDismiss={closeMenu}
@@ -271,7 +336,7 @@ const OrdersScreen = ({ navigation }) => {
               index % 2 === 0 ? styles.evenRow : styles.oddRow,
               item.status === 5 || item.status === 'Cancelled' ? styles.cancelledOrder : null
             ]} 
-            onPress={() => navigation.navigate('OrderDetails', { orderId: item.id })}
+            onPress={() => handleOrderPress(item)}
             onLongPress={() => showDebugInfo(item)}
           >
             <Card.Content>
@@ -438,6 +503,14 @@ const styles = StyleSheet.create({
   },
   filterButton: {
     marginRight: 8,
+  },
+  invoiceButton: {
+    marginRight: 8,
+    backgroundColor: '#0284c7',
+  },
+  aiButton: {
+    marginRight: 8,
+    backgroundColor: '#6366f1',
   },
   refreshButton: {
     minWidth: 40,

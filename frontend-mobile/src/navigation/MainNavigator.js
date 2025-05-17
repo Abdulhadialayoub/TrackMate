@@ -11,12 +11,14 @@ import ProductsScreen from '../screens/main/ProductsScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
 import InvoicesScreen from '../screens/main/InvoicesScreen';
 import CategoriesScreen from '../screens/main/CategoriesScreen';
+import OrdersAIAnalysis from '../screens/main/OrdersAIAnalysis';
 
 // Import detail screens
 import OrderDetailsScreen from '../screens/details/OrderDetailsScreen';
 import CustomerDetailsScreen from '../screens/details/CustomerDetailsScreen';
 import ProductDetailsScreen from '../screens/details/ProductDetailsScreen';
 import InvoiceDetailsScreen from '../screens/details/InvoiceDetailsScreen';
+import OrderAIAnalysis from '../screens/details/OrderAIAnalysis';
 
 // Import form screens
 import NewOrderScreen from '../screens/forms/NewOrderScreen';
@@ -32,48 +34,48 @@ const CommonNavigator = () => {
       <CommonStack.Screen 
         name="ProductDetails" 
         component={ProductDetailsScreen} 
-        options={{ headerShown: true, title: 'Product Details' }}
+        options={{ headerShown: false, title: 'Product Details' }}
       />
       <CommonStack.Screen 
         name="AddProduct" 
         component={NewProductScreen} 
-        options={{ headerShown: true, title: 'Add Product' }}
+        options={{ headerShown: false, title: 'Add Product' }}
       />
       <CommonStack.Screen 
         name="EditProduct" 
         component={NewProductScreen} 
-        options={{ headerShown: true, title: 'Edit Product' }}
+        options={{ headerShown: false, title: 'Edit Product' }}
       />
       
       {/* Customer Screens */}
       <CommonStack.Screen 
         name="CustomerDetails" 
         component={CustomerDetailsScreen} 
-        options={{ headerShown: true, title: 'Customer Details' }}
+        options={{ headerShown: false, title: 'Customer Details' }}
       />
       <CommonStack.Screen 
         name="NewCustomer" 
         component={NewCustomerScreen} 
-        options={{ headerShown: true, title: 'New Customer' }}
+        options={{ headerShown: false, title: 'New Customer' }}
       />
       
       {/* Order Screens */}
       <CommonStack.Screen 
         name="OrderDetails" 
         component={OrderDetailsScreen} 
-        options={{ headerShown: true, title: 'Order Details' }}
+        options={{ headerShown: false, title: 'Order Details' }}
       />
       <CommonStack.Screen 
         name="NewOrder" 
         component={NewOrderScreen} 
-        options={{ headerShown: true, title: 'New Order' }}
+        options={{ headerShown: false, title: 'New Order' }}
       />
       
       {/* Invoice Screens */}
       <CommonStack.Screen 
         name="InvoiceDetails" 
         component={InvoiceDetailsScreen} 
-        options={{ headerShown: true, title: 'Invoice Details' }}
+        options={{ headerShown: false, title: 'InvoiceDetails' }}
       />
     </CommonStack.Navigator>
   );
@@ -172,6 +174,11 @@ const MainNavigator = () => {
       
       {/* Directly add the frequently used screens for more direct navigation */}
       <Stack.Screen 
+      name='CategoriesScreen'
+      component={CategoriesScreen}
+      options={{ headerShown: false, title: 'Categories' }}
+      />
+      <Stack.Screen 
         name="ProductDetails" 
         component={ProductDetailsScreen} 
         options={{ headerShown: true, title: 'Product Details' }}
@@ -186,7 +193,15 @@ const MainNavigator = () => {
         component={NewProductScreen} 
         options={{ headerShown: true, title: 'Edit Product' }}
       />
+      <Stack.Screen 
+        name="InvoiceDetails" 
+        component={InvoiceDetailsScreen} 
+        options={{ headerShown: true, title: 'InvoiceDetails' }}
+      />
+      
+      
     </Stack.Navigator>
+
   );
 };
 

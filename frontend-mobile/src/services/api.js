@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { BASE_URL } from '../config/constants';
+import { BASE_URL, STORAGE_KEYS } from '../config/constants';
 
 // Simple logger
 const logger = {
@@ -135,7 +135,7 @@ api.interceptors.response.use(
 api.interceptors.request.use(
   async config => {
     try {
-      const token = await AsyncStorage.getItem('token');
+      const token = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -178,6 +178,17 @@ const handleApiResponse = (response) => {
     return response.data;
   }
   return [];
+};
+
+// Helper function to convert an ArrayBuffer to a base64 string (for PDF handling)
+const arrayBufferToBase64 = (buffer) => {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 };
 
 // ============= AUTH SERVICE =============
@@ -370,16 +381,116 @@ export const productService = {
   create: async (productData) => {
     try {
       console.log('Creating new product', productData);
-      const response = await api.post('/Product', productData);
+      
+      // Validate required fields
+      if (!productData.name) {
+        return {
+          success: false,
+          message: 'Product name is required'
+        };
+      }
+      
+      // Validate categoryId - ensure it's not empty and is a valid number
+      if (productData.categoryId === undefined || productData.categoryId === null || productData.categoryId === '') {
+        return {
+          success: false,
+          message: 'Category is required'
+        };
+      }
+      
+      // Ensure categoryId is a valid number
+      const categoryId = Number(productData.categoryId);
+      if (isNaN(categoryId) || categoryId <= 0) {
+        return {
+          success: false,
+          message: 'Invalid category ID'
+        };
+      }
+      
+      // Remove any properties that might cause issues with the API
+      const cleanedData = { ...productData };
+      if (cleanedData.id === null || cleanedData.id === undefined || cleanedData.id === '') {
+        delete cleanedData.id;
+      }
+      
+      // Similar to web implementation, ensure we have clean numeric data
+      cleanedData.unitPrice = Number(cleanedData.unitPrice);
+      cleanedData.stockQuantity = Number(cleanedData.stockQuantity);
+      cleanedData.categoryId = Number(cleanedData.categoryId);
+      
+      if (cleanedData.companyId) {
+        cleanedData.companyId = Number(cleanedData.companyId);
+      }
+      
+      if (cleanedData.status !== undefined) {
+        cleanedData.status = Number(cleanedData.status);
+      }
+      
+      // Create a fresh object with explicit typing to match API expectations exactly
+      // This is a more drastic approach that ensures the data format matches exactly what the backend expects
+      const apiPayload = {
+        name: String(cleanedData.name || ''),
+        description: String(cleanedData.description || ''),
+        code: String(cleanedData.code || ''),
+        unitPrice: Number(cleanedData.unitPrice || 0),
+        unit: String(cleanedData.unit || ''),
+        weight: Number(cleanedData.weight || 0),
+        quantity: Number(cleanedData.quantity || 0),
+        stockQuantity: Number(cleanedData.stockQuantity || 0),
+        category: String(cleanedData.categoryId || ''),
+        brand: String(cleanedData.brand || ''),
+        model: String(cleanedData.model || ''),
+        currency: String(cleanedData.currency || 'USD'),
+        status: Number(cleanedData.status || 0),
+        sku: String(cleanedData.sku || ''),
+        isActive: Boolean(cleanedData.isActive)
+      };
+      
+      // Add companyId if present
+      if (cleanedData.companyId) {
+        apiPayload.companyId = Number(cleanedData.companyId);
+      }
+      
+      // Add creator information
+      if (cleanedData.createdBy) {
+        apiPayload.createdBy = String(cleanedData.createdBy);
+      }
+      
+      console.log('Sending cleaned product data to API:', JSON.stringify(apiPayload, null, 2));
+      const response = await api.post('/Product', apiPayload);
+      
       return {
         success: true,
         data: response.data
       };
     } catch (error) {
       console.error('Error creating product', error);
+      
+      // Enhanced error reporting
+      let errorMessage = 'Failed to create product';
+      if (error.response) {
+        // We have a response from the server with an error
+        if (error.response.data && error.response.data.message) {
+          errorMessage = error.response.data.message;
+        } else if (error.response.status === 400) {
+          errorMessage = 'Invalid product data. Please check all fields.';
+        } else if (error.response.status === 500) {
+          errorMessage = 'Server error while creating product. Please try again later.';
+        }
+        
+        console.error('API Error Details:', {
+          status: error.response.status,
+          data: error.response.data,
+          headers: error.response.headers
+        });
+      } else if (error.request) {
+        // Request was made but no response received
+        errorMessage = 'No response from server. Please check your connection.';
+      }
+      
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to create product',
+        message: errorMessage,
         error: error.response?.data
       };
     }
@@ -388,16 +499,119 @@ export const productService = {
   update: async (id, productData) => {
     try {
       console.log(`Updating product ID: ${id}`, productData);
-      const response = await api.put(`/Product/${id}`, productData);
+      
+      // Validate required fields
+      if (!productData.name) {
+        return {
+          success: false,
+          message: 'Product name is required'
+        };
+      }
+      
+      // Validate categoryId - ensure it's not empty and is a valid number
+      if (productData.categoryId === undefined || productData.categoryId === null || productData.categoryId === '') {
+        return {
+          success: false,
+          message: 'Category is required'
+        };
+      }
+      
+      // Ensure categoryId is a valid number
+      const categoryId = Number(productData.categoryId);
+      if (isNaN(categoryId) || categoryId <= 0) {
+        return {
+          success: false,
+          message: 'Invalid category ID'
+        };
+      }
+      
+      // Make sure id is a number
+      const productId = typeof id === 'string' ? parseInt(id, 10) : id;
+      
+      // Remove any properties that might cause issues with the API
+      const cleanedData = { ...productData };
+      delete cleanedData.id; // Remove ID from body as it's in the URL
+      
+      // Similar to web implementation, ensure we have clean numeric data
+      cleanedData.unitPrice = Number(cleanedData.unitPrice);
+      cleanedData.stockQuantity = Number(cleanedData.stockQuantity);
+      cleanedData.categoryId = Number(cleanedData.categoryId);
+      
+      if (cleanedData.companyId) {
+        cleanedData.companyId = Number(cleanedData.companyId);
+      }
+      
+      if (cleanedData.status !== undefined) {
+        cleanedData.status = Number(cleanedData.status);
+      }
+      
+      // Create a fresh object with explicit typing to match API expectations exactly
+      // This is a more drastic approach that ensures the data format matches exactly what the backend expects
+      const apiPayload = {
+        name: String(cleanedData.name || ''),
+        description: String(cleanedData.description || ''),
+        code: String(cleanedData.code || ''),
+        unitPrice: Number(cleanedData.unitPrice || 0),
+        unit: String(cleanedData.unit || ''),
+        weight: Number(cleanedData.weight || 0),
+        quantity: Number(cleanedData.quantity || 0),
+        stockQuantity: Number(cleanedData.stockQuantity || 0),
+        category: String(cleanedData.categoryId || ''),
+        brand: String(cleanedData.brand || ''),
+        model: String(cleanedData.model || ''),
+        currency: String(cleanedData.currency || 'USD'),
+        status: Number(cleanedData.status || 0),
+        sku: String(cleanedData.sku || ''),
+        isActive: Boolean(cleanedData.isActive)
+      };
+      
+      // Add companyId if present
+      if (cleanedData.companyId) {
+        apiPayload.companyId = Number(cleanedData.companyId);
+      }
+      
+      // Add updater information
+      if (cleanedData.updatedBy) {
+        apiPayload.updatedBy = String(cleanedData.updatedBy);
+      }
+      
+      console.log(`Sending cleaned product data to API for ID ${productId}:`, JSON.stringify(apiPayload, null, 2));
+      const response = await api.put(`/Product/${productId}`, apiPayload);
+      
       return {
         success: true,
         data: response.data
       };
     } catch (error) {
       console.error(`Error updating product ID: ${id}`, error);
+      
+      // Enhanced error reporting
+      let errorMessage = 'Failed to update product';
+      if (error.response) {
+        // We have a response from the server with an error
+        if (error.response.data && error.response.data.message) {
+          errorMessage = error.response.data.message;
+        } else if (error.response.status === 400) {
+          errorMessage = 'Invalid product data. Please check all fields.';
+        } else if (error.response.status === 404) {
+          errorMessage = 'Product not found.';
+        } else if (error.response.status === 500) {
+          errorMessage = 'Server error while updating product. Please try again later.';
+        }
+        
+        console.error('API Error Details:', {
+          status: error.response.status,
+          data: error.response.data,
+          headers: error.response.headers
+        });
+      } else if (error.request) {
+        // Request was made but no response received
+        errorMessage = 'No response from server. Please check your connection.';
+      }
+      
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to update product',
+        message: errorMessage,
         error: error.response?.data
       };
     }
@@ -652,6 +866,44 @@ export const customerService = {
       return {
         success: false,
         message: error.response?.data?.message || 'Failed to get customer',
+        error: error.response?.data
+      };
+    }
+  },
+  
+  // Method to get customer by ID - Alias for getById to match the function name used in CustomerDetailsScreen
+  getCustomerById: async (id) => {
+    try {
+      console.log(`Requesting customer with ID: ${id}`);
+      const response = await api.get(`/Customer/${id}`);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error(`Error getting customer ${id}:`, error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Failed to get customer details',
+        error: error.response?.data
+      };
+    }
+  },
+
+  // Method to delete customer - Alias for delete method to match the function name used in CustomerDetailsScreen
+  deleteCustomer: async (id) => {
+    try {
+      console.log(`Deleting customer with ID: ${id}`);
+      const response = await api.delete(`/Customer/${id}`);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error(`Error deleting customer ${id}:`, error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Failed to delete customer',
         error: error.response?.data
       };
     }
@@ -1485,6 +1737,41 @@ export const invoiceService = {
       logger.error('invoiceService', `Error updating invoice status ${id}:`, error);
       throw error;
     }
+  },
+
+  getInvoicePdf: async (id) => {
+    try {
+      console.log(`Getting PDF for invoice ${id}`);
+      
+      if (!id) {
+        console.error('Invoice ID is required');
+        return {
+          success: false,
+          message: 'Invoice ID is required'
+        };
+      }
+      
+      // Create a specific request with responseType blob or arraybuffer
+      const response = await api.get(`/Invoice/${id}/pdf`, {
+        responseType: 'arraybuffer'
+      });
+      
+      // Convert ArrayBuffer to base64
+      const base64 = arrayBufferToBase64(response.data);
+      
+      return {
+        success: true,
+        blob: base64,
+        message: 'PDF fetched successfully'
+      };
+    } catch (error) {
+      console.error(`Error getting PDF for invoice ${id}:`, error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Failed to get invoice PDF',
+        error: error.response?.data
+      };
+    }
   }
 };
 
@@ -1630,6 +1917,196 @@ export const devPanelService = {
     } catch (error) {
       logger.error('devPanelService', `Failed to delete company ${companyId}`, error);
       throw error;
+    }
+  },
+  
+  // SMTP Settings
+  getSmtpSettings: async () => {
+    try {
+      logger.debug('devPanelService', 'Getting SMTP settings');
+      const response = await api.get('/Configuration/smtp');
+      return response.data;
+    } catch (error) {
+      logger.error('devPanelService', 'Failed to get SMTP settings', error);
+      throw error;
+    }
+  },
+  
+  updateSmtpSettings: async (smtpData) => {
+    try {
+      logger.debug('devPanelService', 'Updating SMTP settings');
+      const response = await api.post('/Configuration/smtp', smtpData);
+      return response.data;
+    } catch (error) {
+      logger.error('devPanelService', 'Failed to update SMTP settings', error);
+      throw error;
+    }
+  },
+  
+  sendTestEmail: async (recipient) => {
+    try {
+      logger.debug('devPanelService', `Sending test email to ${recipient}`);
+      const response = await api.post('/Configuration/test-email', { recipient });
+      return response.data;
+    } catch (error) {
+      logger.error('devPanelService', 'Failed to send test email', error);
+      throw error;
+    }
+  },
+  
+  // Database Backups
+  getBackups: async () => {
+    try {
+      logger.debug('devPanelService', 'Getting database backups');
+      const response = await api.get('/Database/backup/list');
+      return response.data;
+    } catch (error) {
+      logger.error('devPanelService', 'Failed to get database backups', error);
+      throw error;
+    }
+  },
+  
+  createBackup: async () => {
+    try {
+      logger.debug('devPanelService', 'Creating database backup');
+      const response = await api.post('/Database/backup');
+      return response.data;
+    } catch (error) {
+      logger.error('devPanelService', 'Failed to create database backup', error);
+      throw error;
+    }
+  },
+  
+  downloadBackup: async (fileName) => {
+    try {
+      logger.debug('devPanelService', `Downloading backup: ${fileName}`);
+      const response = await api.get(`/Database/backup/download/${fileName}`, {
+        responseType: 'blob'
+      });
+      return response.data;
+    } catch (error) {
+      logger.error('devPanelService', `Failed to download backup: ${fileName}`, error);
+      throw error;
+    }
+  },
+  
+  restoreDatabase: async (formData) => {
+    try {
+      logger.debug('devPanelService', 'Restoring database from backup');
+      const response = await api.post('/Database/restore', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      return response.data;
+    } catch (error) {
+      logger.error('devPanelService', 'Failed to restore database', error);
+      throw error;
+    }
+  },
+  
+  resetDatabase: async () => {
+    try {
+      logger.debug('devPanelService', 'Resetting database');
+      const response = await api.post('/Database/reset');
+      return response.data;
+    } catch (error) {
+      logger.error('devPanelService', 'Failed to reset database', error);
+      throw error;
+    }
+  },
+  
+  // Backward compatibility method - will be removed in future versions
+  restoreBackup: async (fileName) => {
+    try {
+      logger.debug('devPanelService', 'Restoring backup (deprecated method)');
+      logger.warn('devPanelService', 'restoreBackup is deprecated, use restoreDatabase instead');
+      
+      // Create form data to match the expected format
+      const formData = new FormData();
+      formData.append('backupFile', fileName);
+      
+      // Delegate to the new implementation by directly calling the API
+      const response = await api.post('/Database/restore', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      return response.data;
+    } catch (error) {
+      logger.error('devPanelService', `Failed to restore backup: ${fileName}`, error);
+      throw error;
+    }
+  }
+};
+
+// ============= MESSAGE SERVICE =============
+export const messageService = {
+  // Send invoice via email with PDF attachment (matches web implementation)
+  sendInvoiceEmail: async (invoiceId, to, subject, body) => {
+    try {
+      console.log(`Sending invoice ${invoiceId} via email to ${to}`);
+      
+      // Get company ID from storage
+      const companyId = await AsyncStorage.getItem(STORAGE_KEYS.COMPANY_ID);
+      
+      // Create the email data matching the web implementation
+      const emailData = {
+        invoiceId: parseInt(invoiceId),
+        to: to,
+        subject: subject || 'Your Invoice',
+        body: body || 'Please find attached invoice.',
+        includeAttachment: true, // Make sure to include the PDF attachment
+        companyId: parseInt(companyId)
+      };
+      
+      console.log('Sending invoice email with attachment:', emailData);
+      const response = await api.post('/email/send-invoice', emailData);
+      
+      return {
+        success: true,
+        data: response.data,
+        message: 'Invoice sent via email successfully'
+      };
+    } catch (error) {
+      console.error(`Error sending invoice ${invoiceId} email:`, error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Failed to send invoice email',
+        error: error.response?.data
+      };
+    }
+  },
+  
+  // Direct email sending function
+  sendDirectEmail: async (to, subject, body, customerId = null) => {
+    try {
+      // Get company ID from storage
+      const companyId = await AsyncStorage.getItem(STORAGE_KEYS.COMPANY_ID);
+      
+      const emailData = {
+        to,
+        subject,
+        body,
+        companyId: parseInt(companyId),
+        customerId: customerId ? parseInt(customerId) : null
+      };
+      
+      console.log('Sending direct email:', emailData);
+      const response = await api.post('/email/send', emailData);
+      
+      return {
+        success: true,
+        message: 'Email sent successfully',
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error sending direct email:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Failed to send email',
+        error: error.response?.data
+      };
     }
   }
 };

@@ -38,10 +38,12 @@ const CategoriesScreen = ({ navigation }) => {
       // Extract data from result
       const categoriesData = result.success ? result.data : [];
       
-      conso // Show error if request failed
+      // Show error if request failed
       if (!result.success) {
         showSnackbar(`Error fetching categories: ${result.message}`, 'error');
       }
+      // Kategorileri state'e ata
+      setCategories(categoriesData);
     } catch (error) {
       console.error('Error fetching categories:', error);
       showSnackbar(`Error fetching categories: ${error.message || 'Unknown error'}`, 'error');
@@ -100,10 +102,16 @@ const CategoriesScreen = ({ navigation }) => {
 
     try {
       let result;
+      // Get userId and companyId from AsyncStorage
+      const userId = await AsyncStorage.getItem('user_id') || 'system';
+      const companyId = parseInt(await AsyncStorage.getItem('company_id') || await AsyncStorage.getItem('COMPANY_ID'), 10);
       
       if (isEditing && selectedCategory) {
         // Update existing category
-        result = await categoryService.update(selectedCategory.id, formData);
+        result = await categoryService.update(selectedCategory.id, {
+          ...formData,
+          updatedBy: userId
+        });
         if (result.success) {
           showSnackbar('Category updated successfully', 'success');
           // Update the categories list
@@ -114,8 +122,13 @@ const CategoriesScreen = ({ navigation }) => {
           showSnackbar(`Failed to update category: ${result.message}`, 'error');
         }
       } else {
-        // Create new category
-        result = await categoryService.create(formData);
+        // Create new category - web versiyonuyla aynı şekilde
+        console.log('Creating new category', { ...formData, companyId, createdBy: userId });
+        result = await categoryService.create({
+          ...formData,
+          companyId: companyId,
+          createdBy: userId
+        });
         if (result.success) {
           showSnackbar('Category created successfully', 'success');
           // Add the new category to the list

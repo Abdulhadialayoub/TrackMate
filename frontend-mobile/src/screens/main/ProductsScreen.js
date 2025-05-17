@@ -142,14 +142,24 @@ const ProductsScreen = ({ navigation }) => {
         <Text style={styles.headerText}>
           {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''} found
         </Text>
-        <Button 
-          icon="refresh" 
-          mode="text" 
-          onPress={onRefresh}
-          disabled={refreshing}
-        >
-          Refresh
-        </Button>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Button
+            icon="shape-outline"
+            mode="outlined"
+            style={{ marginRight: 8 }}
+            onPress={() => navigation.navigate('CategoriesScreen')}
+          >
+            Categories
+          </Button>
+          <Button 
+            icon="refresh" 
+            mode="text" 
+            onPress={onRefresh}
+            disabled={refreshing}
+          >
+            Refresh
+          </Button>
+        </View>
       </View>
       
       <FlatList
@@ -236,15 +246,15 @@ const ProductsScreen = ({ navigation }) => {
           if (parent) {
             // If we're in a nested navigator, navigate using the parent
             console.log('Using parent navigation');
-            parent.navigate('AddProduct');
+            parent.navigate('NewProduct');
           } else if (rootNavigation) {
             // Use the hook-based navigation as fallback
             console.log('Using root navigation');
-            rootNavigation.navigate('AddProduct');
+            rootNavigation.navigate('NewProduct');
           } else {
             // Last resort
             console.log('Using direct navigation');
-            navigation.navigate('AddProduct');
+            navigation.navigate('NewProduct');
           }
         }}
       />

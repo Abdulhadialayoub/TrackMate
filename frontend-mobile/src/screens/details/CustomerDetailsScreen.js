@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Alert, Linking } from 'react-native';
-import { Text, Title, Card, Paragraph, Button, ActivityIndicator, Divider, List, IconButton } from 'react-native-paper';
+import { Text, Title, Card, Paragraph, Button, ActivityIndicator, Divider, List, IconButton, Chip } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { customerService } from '../../services/api';
 
@@ -18,12 +18,31 @@ const CustomerDetailsScreen = ({ route, navigation }) => {
     try {
       setLoading(true);
       setError(null);
-      const data = await customerService.getCustomerById(customerId);
-      setCustomer(data);
-      setLoading(false);
+      
+      const result = await customerService.getCustomerById(customerId);
+      
+      if (result && result.success === false) {
+        // Handle API error response
+        console.error('API returned error:', result.message);
+        setError(result.message || 'Failed to load customer details');
+        setCustomer(null);
+      } else {
+        // Handle successful response (both direct data and API wrapper format)
+        let customerData = result;
+        
+        // Check if result has success property (API wrapper format)
+        if (result && typeof result === 'object' && 'success' in result) {
+          customerData = result.data;
+        }
+        
+        console.log('Customer data retrieved:', customerData);
+        setCustomer(customerData);
+      }
     } catch (err) {
       console.error('Error fetching customer details:', err);
       setError('Failed to load customer details');
+      setCustomer(null);
+    } finally {
       setLoading(false);
     }
   };
@@ -45,12 +64,19 @@ const CustomerDetailsScreen = ({ route, navigation }) => {
           onPress: async () => {
             try {
               setLoading(true);
-              await customerService.deleteCustomer(customerId);
-              Alert.alert('Success', 'Customer deleted successfully');
-              navigation.goBack();
+              const result = await customerService.deleteCustomer(customerId);
+              
+              if (result && result.success === false) {
+                console.error('API returned error:', result.message);
+                Alert.alert('Error', result.message || 'Failed to delete customer');
+              } else {
+                Alert.alert('Success', 'Customer deleted successfully');
+                navigation.goBack();
+              }
             } catch (err) {
               console.error('Error deleting customer:', err);
               Alert.alert('Error', 'Failed to delete customer');
+            } finally {
               setLoading(false);
             }
           }
@@ -68,6 +94,54 @@ const CustomerDetailsScreen = ({ route, navigation }) => {
   const handleEmail = () => {
     if (customer?.email) {
       Linking.openURL(`mailto:${customer.email}`);
+    }
+  };
+
+  const getStatusColor = (status, type) => {
+    if (type === 'order') {
+      switch (status) {
+        case 0: return '#6b7280'; // Draft - gray
+        case 1: return '#f59e0b'; // Pending - amber
+        case 2: return '#3b82f6'; // Confirmed - blue
+        case 3: return '#8b5cf6'; // Shipped - purple
+        case 4: return '#10b981'; // Delivered - green
+        case 5: return '#ef4444'; // Cancelled - red
+        case 6: return '#10b981'; // Completed - green
+        default: return '#6b7280';
+      }
+    } else { // invoice
+      switch (status) {
+        case 0: return '#6b7280'; // Draft - gray
+        case 1: return '#3b82f6'; // Sent - blue
+        case 2: return '#10b981'; // Paid - green
+        case 3: return '#ef4444'; // Overdue - red
+        case 4: return '#9ca3af'; // Cancelled - gray
+        default: return '#6b7280';
+      }
+    }
+  };
+
+  const getStatusLabel = (status, type) => {
+    if (type === 'order') {
+      switch (status) {
+        case 0: return 'Draft';
+        case 1: return 'Pending';
+        case 2: return 'Confirmed'; 
+        case 3: return 'Shipped';
+        case 4: return 'Delivered';
+        case 5: return 'Cancelled';
+        case 6: return 'Completed';
+        default: return 'Unknown';
+      }
+    } else { // invoice
+      switch (status) {
+        case 0: return 'Draft';
+        case 1: return 'Sent';
+        case 2: return 'Paid';
+        case 3: return 'Overdue';
+        case 4: return 'Cancelled';
+        default: return 'Unknown';
+      }
     }
   };
 
@@ -102,6 +176,12 @@ const CustomerDetailsScreen = ({ route, navigation }) => {
       </View>
     );
   }
+
+  // Extract orders from customer data
+  const orders = customer?.orders?.$values || [];
+  
+  // Extract invoices from customer data
+  const invoices = customer?.invoices?.$values || [];
 
   return (
     <ScrollView style={styles.container}>
@@ -182,23 +262,85 @@ const CustomerDetailsScreen = ({ route, navigation }) => {
               </List.Section>
             </>
           )}
-        </Card.Content>
-      </Card>
-      
-      <Card style={styles.card}>
-        <Card.Content>
-          <List.Subheader style={styles.sectionTitle}>Customer Activity</List.Subheader>
-          <Text style={styles.activityPlaceholder}>
-            Order history and activity will appear here.
-          </Text>
-          <Button 
-            mode="text" 
-            icon="history" 
-            onPress={() => navigation.navigate('CustomerOrders', { customerId })}
-            style={styles.viewOrdersButton}
-          >
-            View Order History
-          </Button>
+          
+          <Divider style={styles.divider} />
+          
+          <List.Section>
+            <List.Subheader style={styles.sectionTitle}>Customer Activity</List.Subheader>
+            
+            {orders.length > 0 || invoices.length > 0 ? (
+              <>
+                {orders.length > 0 && (
+                  <>
+                    <Text style={styles.activitySubtitle}>Orders ({orders.length})</Text>
+                    {orders.map((order, index) => (
+                      <List.Item
+                        key={`order-${order.id || index}`}
+                        title={order.orderNumber || `Order #${order.id}`}
+                        description={`Date: ${new Date(order.orderDate).toLocaleDateString()}`}
+                        left={props => <List.Icon {...props} icon="package-variant" />}
+                        right={props => (
+                          <Chip 
+                            mode="outlined" 
+                            style={[styles.statusChip, {borderColor: getStatusColor(order.status, 'order')}]}
+                            textStyle={{color: getStatusColor(order.status, 'order')}}
+                          >
+                            {getStatusLabel(order.status, 'order')}
+                          </Chip>
+                        )}
+                        onPress={() => navigation.navigate('OrderDetails', { orderId: order.id })}
+                      />
+                    ))}
+                  </>
+                )}
+                
+                {invoices.length > 0 && (
+                  <>
+                    <Text style={styles.activitySubtitle}>Invoices ({invoices.length})</Text>
+                    {invoices.map((invoice, index) => (
+                      <List.Item
+                        key={`invoice-${invoice.id || index}`}
+                        title={invoice.invoiceNumber || `Invoice #${invoice.id}`}
+                        description={`Date: ${new Date(invoice.invoiceDate).toLocaleDateString()}`}
+                        left={props => <List.Icon {...props} icon="file-document-outline" />}
+                        right={props => (
+                          <Chip 
+                            mode="outlined" 
+                            style={[styles.statusChip, {borderColor: getStatusColor(invoice.status, 'invoice')}]}
+                            textStyle={{color: getStatusColor(invoice.status, 'invoice')}}
+                          >
+                            {getStatusLabel(invoice.status, 'invoice')}
+                          </Chip>
+                        )}
+                        onPress={() => navigation.navigate('InvoiceDetails', { invoiceId: invoice.id })}
+                      />
+                    ))}
+                  </>
+                )}
+                
+                <View style={styles.activityButtonsContainer}>
+                  <Button 
+                    mode="text" 
+                    icon="history" 
+                    onPress={() => navigation.navigate('CustomerOrders', { customerId })}
+                  >
+                    All Orders
+                  </Button>
+                  <Button 
+                    mode="text" 
+                    icon="receipt" 
+                    onPress={() => navigation.navigate('InvoicesScreen', { customerId })}
+                  >
+                    All Invoices
+                  </Button>
+                </View>
+              </>
+            ) : (
+              <Text style={styles.activityPlaceholder}>
+                No activity found for this customer.
+              </Text>
+            )}
+          </List.Section>
         </Card.Content>
       </Card>
       
@@ -307,9 +449,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginVertical: 8,
   },
-  viewOrdersButton: {
-    alignSelf: 'flex-start',
+  activitySubtitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#374151',
+    paddingHorizontal: 16,
     marginTop: 8,
+    marginBottom: 4,
+  },
+  statusChip: {
+    height: 28,
+    alignSelf: 'center',
+  },
+  activityButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingHorizontal: 8,
   },
   actionButtons: {
     flexDirection: 'row',

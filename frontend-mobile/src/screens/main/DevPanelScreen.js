@@ -67,10 +67,32 @@ const DevPanelScreen = () => {
   const fetchUsers = useCallback(async () => {
     setLoading(prev => ({ ...prev, users: true }));
     try {
-      const data = await devPanelService.getUsers();
-      setUsers(data);
+      const response = await devPanelService.getUsers();
+      // Handle different possible response structures
+      let userData = [];
+      
+      if (response?.$values) {
+        // .NET structured array with $values
+        userData = response.$values;
+      } else if (response && Array.isArray(response)) {
+        // Direct array
+        userData = response;
+      } else if (response && typeof response === 'object') {
+        // Try to find nested $values array
+        Object.keys(response).forEach(key => {
+          if (key === '$values' && Array.isArray(response[key])) {
+            userData = response[key];
+          }
+        });
+      }
+      
+      setUsers(userData || []);
       // Update stats based on fetched users
-      setSystemStats(prev => ({ ...prev, totalUsers: data.length, activeUsers: data.filter(u => u.isActive).length }));
+      setSystemStats(prev => ({ 
+        ...prev, 
+        totalUsers: userData?.length || 0, 
+        activeUsers: (userData && Array.isArray(userData)) ? userData.filter(u => u.isActive).length : 0 
+      }));
     } catch (error) {
       console.error('Error fetching users:', error);
       showSnackbar(`Error fetching users: ${error.message || 'Unknown error'}`, 'error');
@@ -83,10 +105,28 @@ const DevPanelScreen = () => {
   const fetchCompanies = useCallback(async () => {
     setLoading(prev => ({ ...prev, companies: true }));
     try {
-      const data = await devPanelService.getCompanies();
-      setCompanies(data);
+      const response = await devPanelService.getCompanies();
+      // Handle different possible response structures
+      let companyData = [];
+      
+      if (response?.$values) {
+        // .NET structured array with $values
+        companyData = response.$values;
+      } else if (response && Array.isArray(response)) {
+        // Direct array
+        companyData = response;
+      } else if (response && typeof response === 'object') {
+        // Try to find nested $values array
+        Object.keys(response).forEach(key => {
+          if (key === '$values' && Array.isArray(response[key])) {
+            companyData = response[key];
+          }
+        });
+      }
+      
+      setCompanies(companyData || []);
       // Update stats based on fetched companies
-      setSystemStats(prev => ({ ...prev, totalCompanies: data.length }));
+      setSystemStats(prev => ({ ...prev, totalCompanies: companyData?.length || 0 }));
     } catch (error) {
       console.error('Error fetching companies:', error);
       showSnackbar(`Error fetching companies: ${error.message || 'Unknown error'}`, 'error');
@@ -100,10 +140,29 @@ const DevPanelScreen = () => {
     setLoading(prev => ({ ...prev, backups: true }));
     try {
       const data = await devPanelService.getBackups();
-      setBackups(data.backups || []);
+      // Handle different possible response structures
+      let backupsList = [];
+      if (data?.backups?.length) {
+        // Normal array
+        backupsList = data.backups;
+      } else if (data?.backups?.$values) {
+        // .NET serialized array structure
+        backupsList = data.backups.$values;
+      } else if (Array.isArray(data)) {
+        // Direct array
+        backupsList = data;
+      }
+      setBackups(backupsList || []);
     } catch (error) {
       console.error('Error fetching backups:', error);
-      showSnackbar(`Error fetching backups: ${error.message || 'Unknown error'}`, 'error');
+      
+      // Show more detailed error message
+      const errorMessage = error.message || 'Unknown error';
+      const errorType = error.name || 'Error';
+      
+      showSnackbar(`Error fetching backups: ${errorType} - ${errorMessage}`, 'error');
+      
+      // Set empty backups array
       setBackups([]);
     } finally {
       setLoading(prev => ({ ...prev, backups: false }));
@@ -117,7 +176,13 @@ const DevPanelScreen = () => {
       setSmtpSettings(data || { host: '', port: 587, enableSsl: true, username: '', password: '', from: '' });
     } catch (error) {
       console.error('Error fetching SMTP settings:', error);
-      showSnackbar(`Error fetching SMTP: ${error.message || 'Unknown error'}`, 'error');
+      
+      // Set default SMTP settings on error
+      setSmtpSettings({ host: '', port: 587, enableSsl: true, username: '', password: '', from: '' });
+      
+      // Show more detailed error message
+      const errorMessage = error.message || 'Unknown error';
+      showSnackbar(`Error fetching SMTP settings: ${errorMessage}`, 'error');
     } finally {
       setLoading(prev => ({ ...prev, config: false }));
     }
@@ -133,12 +198,12 @@ const DevPanelScreen = () => {
          version: '1.0-Mobile',
          uptime: 'N/A (Mobile)',
          lastRestart: 'N/A (Mobile)',
-         totalUsers: users.length,
-         activeUsers: users.filter(u => u.isActive).length,
-         totalCompanies: companies.length
+         totalUsers: users?.length || 0,
+         activeUsers: (users && Array.isArray(users)) ? users.filter(u => u.isActive).length : 0,
+         totalCompanies: companies?.length || 0
      }));
      setLoading(prev => ({ ...prev, system: false }));
-  }, [users, companies]); // Re-run if users/companies change
+  }, [users, companies]);
 
   // --- Initial Data Load & Tab Change Logic ---
   useEffect(() => {
@@ -352,10 +417,22 @@ const DevPanelScreen = () => {
     setRestoreConfirmDialogVisible(false);
     setLoading(prev => ({ ...prev, restoreAction: true }));
     try {
-      // On mobile, we typically restore by filename from the list
-      await devPanelService.restoreBackup(selectedBackup.fileName);
+      // Create a FormData object to send the backup filename
+      const formData = new FormData();
+      formData.append('backupFile', selectedBackup.fileName);
+      
+      // Call the restore database method with the formData
+      await devPanelService.restoreDatabase(formData);
+      
       showSnackbar(`Restoring from ${selectedBackup.fileName}... Check server logs.`, 'info');
-      // Maybe refresh data after a delay or prompt user?
+      
+      // Refresh data after successful restore
+      setTimeout(() => {
+        fetchUsers();
+        fetchCompanies();
+        fetchBackups();
+      }, 2000);
+      
     } catch (error) {
       console.error('Error restoring backup:', error);
       showSnackbar(`Error restoring backup: ${error.message || 'Unknown error'}`, 'error');
@@ -431,7 +508,7 @@ const DevPanelScreen = () => {
       >
         Add User
       </Button>
-      {loading.users && !users.length ? (
+      {loading.users && !users?.length ? (
          <ActivityIndicator animating={true} size="large" style={styles.loadingIndicator} />
       ) : (
         <DataTable>
@@ -440,7 +517,7 @@ const DevPanelScreen = () => {
              <DataTable.Title><Text>TEMP HEADER</Text></DataTable.Title>
           </DataTable.Header>
 
-          {users.map((user) => (
+          {Array.isArray(users) && users.map((user) => (
             <DataTable.Row key={user.id}>
               <DataTable.Cell>{`${user.firstName} ${user.lastName}`}</DataTable.Cell>
               <DataTable.Cell>{user.email}</DataTable.Cell>
@@ -473,7 +550,7 @@ const DevPanelScreen = () => {
         >
             Add Company
         </Button>
-        {loading.companies && !companies.length ? (
+        {loading.companies && !companies?.length ? (
             <ActivityIndicator animating={true} size="large" style={styles.loadingIndicator} />
         ) : (
             <DataTable>
@@ -482,7 +559,7 @@ const DevPanelScreen = () => {
                <DataTable.Title><Text>TEMP HEADER</Text></DataTable.Title>
             </DataTable.Header>
 
-            {companies.map((company) => (
+            {Array.isArray(companies) && companies.map((company) => (
                 <DataTable.Row key={company.id}>
                 <DataTable.Cell>{company.name}</DataTable.Cell>
                 <DataTable.Cell>{company.email}</DataTable.Cell>
@@ -545,15 +622,15 @@ const DevPanelScreen = () => {
              <Card.Content>
                 {loading.backups ? (
                     <ActivityIndicator animating={true} />
-                ) : backups.length === 0 ? (
+                ) : !Array.isArray(backups) || backups.length === 0 ? (
                     <Text>No backups found.</Text>
                 ) : (
                     <List.Section>
                         {backups.map((backup, index) => (
                             <List.Item
-                                key={backup.fileName || index}
-                                title={backup.fileName}
-                                description={`Created: ${backup.createdAt ? new Date(backup.createdAt).toLocaleString() : 'Unknown'}`}
+                                key={backup?.fileName || `backup-${index}`}
+                                title={backup?.fileName || `Backup ${index + 1}`}
+                                description={`Created: ${backup?.createdAt ? new Date(backup.createdAt).toLocaleString() : 'Unknown'}`}
                                 left={props => <List.Icon {...props} icon="database" />}
                                 right={props => 
                                    <IconButton 

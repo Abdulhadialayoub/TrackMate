@@ -1158,8 +1158,8 @@ export const orderService = {
       
       console.log('Sending sanitized order data to API:', JSON.stringify(sanitizedData, null, 2));
       
-      // Send the sanitized data to the API, wrapped in orderDto
-      const response = await api.post('/Order', { orderDto: sanitizedData });
+      // Send the sanitized data to the API, directly without wrapping in orderDto
+      const response = await api.post('/Order', sanitizedData);
       
       console.log('API Response:', response.status, JSON.stringify(response.data).substring(0, 200));
       
@@ -1389,7 +1389,8 @@ export const orderService = {
         numericValue: numericStatus
       });
       
-      const response = await api.put(`/Order/${id}/status`, { statusDto: { Status: numericStatus } });
+      // Send status directly without the statusDto wrapper
+      const response = await api.put(`/Order/${id}/status`, { Status: numericStatus });
       return {
         success: true,
         data: response.data
