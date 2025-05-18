@@ -1,4 +1,10 @@
 # 🏢 TrackMate Otomasyonu
+## 🚀 Proje Amacı
+- İş süreçlerini dijitalleştirerek verimliliği artırmak.
+- Birden fazla şirketin tek sistem üzerinden yönetimini sağlamak.
+- Güvenli ve yetkilendirilmiş bir kullanıcı yönetim sistemi oluşturmak.
+- Fatura ve belge işlemlerini kolaylaştırmak.
+- Merkezi admin paneli ile sistem yönetimini basitleştirmek.
 
 ## 🎯 Hedef Kitle
 TrackMate, küçük, orta ve büyük ölçekli işletmeler için geliştirilmiş bir iş otomasyon sistemidir. Özellikle:
@@ -7,13 +13,6 @@ TrackMate, küçük, orta ve büyük ölçekli işletmeler için geliştirilmiş
 - Fatura, raporlama ve belge yönetimi süreçlerini dijitalleştirmek isteyen muhasebe departmanları,
 - Mobil ve web üzerinden operasyonel süreçlerini takip etmek isteyen işletmeler,
 - Yapay zeka destekli analizlerle karar süreçlerini optimize etmeyi hedefleyen yöneticiler ve danışmanlar için idealdir.
-
-## 🚀 Proje Amacı
-- İş süreçlerini dijitalleştirerek verimliliği artırmak.
-- Birden fazla şirketin tek sistem üzerinden yönetimini sağlamak.
-- Güvenli ve yetkilendirilmiş bir kullanıcı yönetim sistemi oluşturmak.
-- Fatura ve belge işlemlerini kolaylaştırmak.
-- Merkezi admin paneli ile sistem yönetimini basitleştirmek.
 
 ## 🛠️ Kullanılan Teknolojiler
 - Web Frontend: React
