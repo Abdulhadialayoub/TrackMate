@@ -96,10 +96,9 @@ Mobil uygulama, backend API'ye bağlanmak için bir proxy sunucusu kullanır. Bu
 ```
 cd frontend-mobile
 npm install
-node proxy-server.js
 ```
 
-Proxy sunucusu http://localhost:8081 adresinde çalışacak ve API isteklerini http://localhost:5105 adresine yönlendirecektir.
+API isteklerini http://localhost:5105 adresine yönlendiremesi icin Mobilde Src contes.js icinde ip degismesi gerekiyor.
 
 #### Expo ile Çalıştırma
 Yeni bir terminal penceresinde (proxy sunucusu çalışırken):
