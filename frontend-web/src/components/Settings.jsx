@@ -64,7 +64,7 @@ const Settings = () => {
   const [language, setLanguage] = useState('en');
   const [saving, setSaving] = useState(false);
   const [apiSettings, setApiSettings] = useState({
-    baseUrl: localStorage.getItem('api_base_url') || 'https://wren-integral-lionfish.ngrok-free.app/api',
+    baseUrl: localStorage.getItem('api_base_url') || 'https:// trackmate.runasp.net/api',
     timeout: localStorage.getItem('api_timeout') || '10000'
   });
 

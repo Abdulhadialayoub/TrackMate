@@ -4,7 +4,7 @@ import axios from 'axios';
 const API_CONFIG = {
   // Base URL for API requests
   //https://localhost:7092/api
-  BASE_URL: 'http://trackmate.runasp.net/api',
+  BASE_URL: 'https:// trackmate.runasp.net/api',
   
   // API Endpoints
   ENDPOINTS: {
