@@ -199,7 +199,7 @@ export const messageService = {
             const token = localStorage.getItem('token');
             
             // Try direct SQL query via special endpoint
-            const response = await fetch('https://localhost:7092/api/db/query', {
+            const response = await fetch('http://trackmate.runasp.net/api/db/query', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,

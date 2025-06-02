@@ -86,6 +86,89 @@ export const orderService = {
     }
   },
 
+  getOrdersByCompany: async (companyId) => {
+    try {
+      if (!companyId) {
+        console.error('No company ID provided');
+        return {
+          success: false,
+          message: 'Company ID is required',
+          data: []
+        };
+      }
+      
+      console.log(`Requesting orders for company ID: ${companyId}`);
+      
+      const response = await api.get(`/Order/company/${companyId}`);
+      console.log(`Response status: ${response.status}`);
+      console.log('Response data structure:', typeof response.data);
+      
+      // Check for different response formats
+      if (Array.isArray(response.data)) {
+        console.log(`Received ${response.data.length} company orders from API`);
+        return {
+          success: true,
+          data: response.data
+        };
+      } else if (response.data && typeof response.data === 'object') {
+        // Handle ReferenceHandler.Preserve format with $values
+        if (response.data.$values && Array.isArray(response.data.$values)) {
+          console.log(`Extracted ${response.data.$values.length} company orders from $values property`);
+          return {
+            success: true,
+            data: response.data.$values
+          };
+        }
+        
+        // Handle case where data might be nested in a property
+        if (response.data.data && Array.isArray(response.data.data)) {
+          console.log(`Extracted ${response.data.data.length} company orders from data property`);
+          return {
+            success: true,
+            data: response.data.data
+          };
+        } else {
+          // Try to extract all possible array properties
+          const possibleArrayProperties = Object.entries(response.data)
+            .filter(([_, value]) => Array.isArray(value))
+            .map(([key, value]) => ({ key, length: value.length }));
+          
+          if (possibleArrayProperties.length > 0) {
+            // Use the array property with the most items
+            const bestProperty = possibleArrayProperties.sort((a, b) => b.length - a.length)[0];
+            console.log(`Found array property '${bestProperty.key}' with ${bestProperty.length} items`);
+            return {
+              success: true,
+              data: response.data[bestProperty.key]
+            };
+          }
+        }
+      }
+      
+      // If we got here, we didn't find any orders in the expected format
+      console.warn('Response did not contain company orders in expected format:', response.data);
+      return {
+        success: true,
+        data: [], // Return empty array as no errors occurred, just no data
+        message: 'No orders found for company'
+      };
+    } catch (error) {
+      console.error(`Error getting orders for company ${companyId}:`, error);
+      
+      // Add more detailed logging for the error
+      if (error.response) {
+        console.error('Error response status:', error.response.status);
+        console.error('Error response data:', error.response.data);
+      }
+      
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Failed to get company orders',
+        error: error.response?.data
+      };
+    }
+  },
+
   getById: async (id) => {
     try {
       console.log(`Requesting order details for ID: ${id}`);

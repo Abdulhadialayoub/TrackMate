@@ -10,9 +10,11 @@ import {
   Alert,
   InputAdornment,
   IconButton,
-  CircularProgress
+  CircularProgress,
+  Grid,
+  Divider
 } from '@mui/material';
-import { Visibility, VisibilityOff } from '@mui/icons-material';
+import { Visibility, VisibilityOff, LockOutlined } from '@mui/icons-material';
 import { useAppContext } from '../context/AppContext';
 
 const Login = () => {
@@ -99,109 +101,144 @@ const Login = () => {
   };
 
   return (
-    <Container component="main" maxWidth="xs">
-      <Box
-        sx={{
-          marginTop: 8,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-        }}
-      >
-        <Paper
-          elevation={3}
-          sx={{
-            p: 4,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            width: '100%',
-          }}
-        >
-          <Typography component="h1" variant="h5" fontWeight="bold" color="primary">
-            TrackMate
-          </Typography>
-          <Typography component="h2" variant="h6" mt={1}>
-            Sign In
-          </Typography>
-          
-          {apiError && (
-            <Alert severity="error" sx={{ mt: 2, width: '100%' }}>
-              {apiError}
-            </Alert>
-          )}
-          
-          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2, width: '100%' }}>
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              id="username"
-              label="Email or Username"
-              name="username"
-              autoComplete="email"
-              autoFocus
-              value={formData.username}
-              onChange={handleChange}
-              error={!!errors.username}
-              helperText={errors.username}
-              disabled={loading}
-            />
-            
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              name="password"
-              label="Password"
-              type={showPassword ? 'text' : 'password'}
-              id="password"
-              autoComplete="current-password"
-              value={formData.password}
-              onChange={handleChange}
-              error={!!errors.password}
-              helperText={errors.password}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      aria-label="toggle password visibility"
-                      onClick={handleTogglePasswordVisibility}
-                      edge="end"
-                    >
-                      {showPassword ? <VisibilityOff /> : <Visibility />}
-                    </IconButton>
-                  </InputAdornment>
-                ),
+    <Box 
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)'
+      }}
+    >
+      <Container component="main" maxWidth="sm">
+        <Grid container>
+          <Grid item xs={12}>
+            <Paper
+              elevation={4}
+              sx={{
+                p: 4,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                borderRadius: 3,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
               }}
-            />
-            
-            <Button
-              type="submit"
-              fullWidth
-              variant="contained"
-              sx={{ mt: 3, mb: 2, height: 48 }}
-              disabled={loading}
             >
-              {loading ? (
-                <CircularProgress size={24} color="inherit" />
-              ) : (
-                'Sign In'
+              <Box
+                sx={{ 
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  mb: 3
+                }}
+              >
+                <Typography component="h1" variant="h4" fontWeight="bold" color="primary" gutterBottom>
+                  TrackMate
+                </Typography>
+                <Typography variant="subtitle1" color="text.secondary">
+                  Sign in to your account to continue
+                </Typography>
+              </Box>
+              
+              {apiError && (
+                <Alert severity="error" sx={{ mt: 2, width: '100%' }}>
+                  {apiError}
+                </Alert>
               )}
-            </Button>
-            
-            <Box sx={{ mt: 2, textAlign: 'center' }}>
-              <Typography variant="body2">
-                Don't have an account?{' '}
-                <Link to="/register" style={{ color: theme => theme.palette.primary.main, textDecoration: 'none' }}>
-                  Sign Up
-                </Link>
-              </Typography>
-            </Box>
-          </Box>
-        </Paper>
-      </Box>
-    </Container>
+              
+              <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2, width: '100%' }}>
+                <TextField
+                  margin="normal"
+                  required
+                  fullWidth
+                  id="username"
+                  label="Email or Username"
+                  name="username"
+                  autoComplete="email"
+                  autoFocus
+                  value={formData.username}
+                  onChange={handleChange}
+                  error={!!errors.username}
+                  helperText={errors.username}
+                  disabled={loading}
+                  sx={{ mb: 3 }}
+                />
+                
+                <TextField
+                  margin="normal"
+                  required
+                  fullWidth
+                  name="password"
+                  label="Password"
+                  type={showPassword ? 'text' : 'password'}
+                  id="password"
+                  autoComplete="current-password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  error={!!errors.password}
+                  helperText={errors.password}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          aria-label="toggle password visibility"
+                          onClick={handleTogglePasswordVisibility}
+                          edge="end"
+                        >
+                          {showPassword ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+                
+                
+                
+                <Button
+                  type="submit"
+                  fullWidth
+                  variant="contained"
+                  sx={{ 
+                    mt: 4, 
+                    mb: 3, 
+                    height: 56, 
+                    fontSize: '1rem',
+                    fontWeight: 'bold',
+                    boxShadow: '0 4px 12px rgba(2, 132, 199, 0.2)'
+                  }}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <CircularProgress size={24} color="inherit" />
+                  ) : (
+                    'Sign In'
+                  )}
+                </Button>
+                
+                <Divider sx={{ my: 2 }}>
+                  <Typography variant="body2" color="text.secondary">OR</Typography>
+                </Divider>
+                
+                <Box sx={{ mt: 2, textAlign: 'center' }}>
+                  <Typography variant="body1">
+                    Don't have an account?{' '}
+                    <Link 
+                      to="/register" 
+                      style={{ 
+                        color: '#0284c7', 
+                        textDecoration: 'none',
+                        fontWeight: 'bold' 
+                      }}
+                    >
+                      Sign Up
+                    </Link>
+                  </Typography>
+                </Box>
+              </Box>
+            </Paper>
+          </Grid>
+        </Grid>
+      </Container>
+    </Box>
   );
 };
 

@@ -22,7 +22,8 @@ import {
   ListItemSecondaryAction,
   IconButton,
   useTheme,
-  Alert
+  Alert,
+  CircularProgress
 } from '@mui/material';
 import { 
   TrendingUp, 
@@ -47,6 +48,7 @@ import {
 } from '@mui/icons-material';
 import { authService, companyService } from '../services/api';
 import { dashboardService } from '../services/dashboardService';
+import { orderService } from '../services/orderService';
 import { motion } from 'framer-motion';
 
 const Dashboard = () => {
@@ -55,6 +57,7 @@ const Dashboard = () => {
   const theme = useTheme();
   const [userProfile, setUserProfile] = useState(null);
   const [companyName, setCompanyName] = useState('');
+  const [companyId, setCompanyId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [redirected, setRedirected] = useState(false);
   const [error, setError] = useState(null);
@@ -124,6 +127,7 @@ const Dashboard = () => {
             // Fetch company information
             const companyId = localStorage.getItem('company_id');
             if (companyId) {
+              setCompanyId(companyId);
               const companyResult = await companyService.getById(companyId);
               if (companyResult.success && companyResult.data) {
                 setCompanyName(companyResult.data.name || 'Your Company');
@@ -144,6 +148,12 @@ const Dashboard = () => {
               role: userRole,
               email: localStorage.getItem('user_email') || ''
             });
+          }
+          
+          // Get company ID
+          const companyId = localStorage.getItem('company_id');
+          if (companyId) {
+            setCompanyId(companyId);
           }
         }
       }
@@ -167,13 +177,58 @@ const Dashboard = () => {
     setError(null);
     
     try {
-      // Fetch dashboard statistics
+      // Get current company ID from state or localStorage
+      const currentCompanyId = companyId || localStorage.getItem('company_id');
+      console.log('Fetching dashboard data for company ID:', currentCompanyId);
+      
+      if (!currentCompanyId) {
+        setError('Company ID is required to calculate revenue.');
+        setLoading(false);
+        return;
+      }
+      
+      // Fetch company orders directly from API endpoint
+      let calculatedRevenue = 0;
+      const ordersResult = await orderService.getOrdersByCompany(currentCompanyId);
+      
+      if (ordersResult.success && Array.isArray(ordersResult.data)) {
+        console.log(`Got ${ordersResult.data.length} orders for company ID ${currentCompanyId}`);
+        
+        // Calculate revenue based only on Completed orders (status 6)
+        calculatedRevenue = ordersResult.data
+          .filter(order => {
+            // Check if order status is 'Completed' (either as number 6 or string 'Completed')
+            return order.status === 6 || order.status === '6' || order.status === 'Completed';
+          })
+          .reduce((total, order) => {
+            // Use totalAmount, total, or calculate from items if available
+            let orderTotal = 0;
+            if (typeof order.totalAmount === 'number') {
+              orderTotal = order.totalAmount;
+            } else if (typeof order.total === 'number') {
+              orderTotal = order.total;
+            } else if (typeof order.subTotal === 'number') {
+              orderTotal = order.subTotal + (order.taxAmount || 0) + (order.shippingCost || 0);
+            } else if (typeof order.totalAmount === 'string' && !isNaN(parseFloat(order.totalAmount))) {
+              orderTotal = parseFloat(order.totalAmount);
+            } else if (typeof order.total === 'string' && !isNaN(parseFloat(order.total))) {
+              orderTotal = parseFloat(order.total);
+            }
+            return total + orderTotal;
+          }, 0);
+          
+        console.log('Calculated revenue from completed orders for company:', calculatedRevenue);
+      } else {
+        console.error('Failed to fetch company orders:', ordersResult.message);
+      }
+      
+      // Fetch dashboard statistics for other data
       const statsResult = await dashboardService.getDashboardStats();
       if (statsResult.success && statsResult.data) {
         setDashboardStats({
           userCount: statsResult.data.userCount || 0,
           orderCount: statsResult.data.activeOrderCount || 0,
-          revenue: statsResult.data.revenue || 0,
+          revenue: calculatedRevenue, // Use our calculated revenue
           productCount: statsResult.data.productCount || 0
         });
       } else {
@@ -181,14 +236,14 @@ const Dashboard = () => {
       }
       
       // Fetch recent orders - increase limit to ensure we get more orders
-      const ordersResult = await dashboardService.getRecentOrders(10); // Increased from default 5
-      if (ordersResult.success && ordersResult.data) {
+      const recentOrdersResult = await dashboardService.getRecentOrders(10); // Increased from default 5
+      if (recentOrdersResult.success && recentOrdersResult.data) {
         // Ensure recentOrders is always an array
-        console.log('Recent orders data received:', ordersResult.data);
+        console.log('Recent orders data received:', recentOrdersResult.data);
         
-        if (Array.isArray(ordersResult.data)) {
+        if (Array.isArray(recentOrdersResult.data)) {
           // Convert numeric status to string status for display
-          const processedOrders = ordersResult.data.map(order => {
+          const processedOrders = recentOrdersResult.data.map(order => {
             // Make sure order has a status
             let status = order.status;
             
@@ -220,22 +275,22 @@ const Dashboard = () => {
           });
           
           setRecentOrders(processedOrders);
-        } else if (ordersResult.data && typeof ordersResult.data === 'object') {
+        } else if (recentOrdersResult.data && typeof recentOrdersResult.data === 'object') {
           // Handle case where data might be a single object or have a nested array
-          if (ordersResult.data.$values && Array.isArray(ordersResult.data.$values)) {
-            setRecentOrders(ordersResult.data.$values);
-          } else if (ordersResult.data.orders && Array.isArray(ordersResult.data.orders)) {
-            setRecentOrders(ordersResult.data.orders);
+          if (recentOrdersResult.data.$values && Array.isArray(recentOrdersResult.data.$values)) {
+            setRecentOrders(recentOrdersResult.data.$values);
+          } else if (recentOrdersResult.data.orders && Array.isArray(recentOrdersResult.data.orders)) {
+            setRecentOrders(recentOrdersResult.data.orders);
           } else {
             // If we can't find an array, set an empty array
-            console.warn('Recent orders data is not in expected format:', ordersResult.data);
+            console.warn('Recent orders data is not in expected format:', recentOrdersResult.data);
             setRecentOrders([]);
           }
         } else {
           setRecentOrders([]);
         }
       } else {
-        console.error('Failed to fetch recent orders:', ordersResult.message);
+        console.error('Failed to fetch recent orders:', recentOrdersResult.message);
         setRecentOrders([]);
       }
       
@@ -269,153 +324,237 @@ const Dashboard = () => {
     };
     
     return [
-      { title: 'Company Users', value: dashboardStats.userCount.toString(), color: '#3f51b5' },
-      { title: 'Active Orders', value: dashboardStats.orderCount.toString(), color: '#f44336' },
-      { title: 'Company Revenue', value: formatCurrency(dashboardStats.revenue), color: '#4caf50' },
-      { title: 'Company Products', value: dashboardStats.productCount.toString(), color: '#ff9800' },
+      { 
+        title: 'Company Users', 
+        value: dashboardStats.userCount.toString(), 
+        color: theme.palette.primary.main,
+        icon: <PeopleIcon sx={{ fontSize: 40, color: theme.palette.primary.main }} />
+      },
+      { 
+        title: 'Active Orders', 
+        value: dashboardStats.orderCount.toString(), 
+        color: theme.palette.secondary.main,
+        icon: <OrdersIcon sx={{ fontSize: 40, color: theme.palette.secondary.main }} />
+      },
+      { 
+        title: 'Company Revenue', 
+        value: formatCurrency(dashboardStats.revenue), 
+        color: theme.palette.success.main,
+        icon: <AttachMoneyIcon sx={{ fontSize: 40, color: theme.palette.success.main }} />
+      },
+      { 
+        title: 'Company Products', 
+        value: dashboardStats.productCount.toString(), 
+        color: theme.palette.warning.main,
+        icon: <InventoryIcon sx={{ fontSize: 40, color: theme.palette.warning.main }} />
+      },
     ];
   };
   
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+    <Box 
+      sx={{ 
+        minHeight: '100vh',
+        background: '#f8fafc',
+        pt: 2,
+        pb: 6
+      }}
+    >
       {/* Main content with animation */}
-      <Box
-        component="main"
-        sx={{ 
-          flexGrow: 1, 
-          p: 3,
-          display: 'flex',
-          flexDirection: 'column',
-          bgcolor: '#f5f5f5',
-        }}
-      >
+      <Container maxWidth="lg">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.3 }}
-          style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
         >
-          <Container maxWidth="lg">
-            {/* Header with welcome message and refresh button */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', my: 4 }}>
-              <Box>
-                <Typography variant="h4" fontWeight="medium">
-                  {userProfile?.role === 'Dev' 
-                    ? `System Dashboard${userProfile?.name ? ` - Welcome ${userProfile.name}` : ''}`
-                    : userProfile?.role === 'Admin' 
-                    ? `${companyName || 'Company'} Dashboard${userProfile?.name ? ` - Welcome ${userProfile.name}` : ''}`
-                    : `Welcome back${userProfile?.name ? `, ${userProfile.name}` : ''}`}
-                </Typography>
-                <Typography variant="body1" color="text.secondary" mt={1}>
-                  {companyName ? `Here's what's happening with ${companyName} today.` : "Here's what's happening with your company today."}
-                </Typography>
-              </Box>
-              <Button
-                variant="outlined"
-                startIcon={<RefreshIcon />}
-                onClick={handleRefresh}
-                disabled={loading}
-              >
-                Refresh
-              </Button>
+          {/* Header with welcome message and refresh button */}
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              mb: 4,
+              pb: 3,
+              borderBottom: '1px solid rgba(0,0,0,0.05)'
+            }}
+          >
+            <Box>
+              <Typography variant="h4" fontWeight="bold" color="primary">
+                {userProfile?.role === 'Dev' 
+                  ? `System Dashboard`
+                  : userProfile?.role === 'Admin' 
+                  ? `${companyName || 'Company'} Dashboard`
+                  : `Welcome Back`}
+              </Typography>
+              <Typography variant="h6" color="text.secondary" sx={{ mt: 1 }}>
+                {userProfile?.name ? `Hello, ${userProfile.name}` : ''}
+              </Typography>
+              <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
+                {companyName ? `Here's what's happening with ${companyName} today.` : "Here's what's happening with your company today."}
+              </Typography>
             </Box>
+            <Button
+              variant="contained"
+              startIcon={<RefreshIcon />}
+              onClick={handleRefresh}
+              disabled={loading}
+              sx={{ 
+                px: 3, 
+                py: 1.2,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                borderRadius: 2
+              }}
+            >
+              Refresh Data
+            </Button>
+          </Box>
             
-            {/* Error message if there was an error */}
-            {error && (
-              <Alert severity="error" sx={{ mb: 3 }}>
-                {error}
-              </Alert>
-            )}
+          {/* Error message if there was an error */}
+          {error && (
+            <Alert 
+              severity="error" 
+              sx={{ 
+                mb: 4,
+                borderRadius: 2,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+              }}
+            >
+              {error}
+            </Alert>
+          )}
             
-            {/* Summary cards */}
-            {loading ? (
-              <Box sx={{ width: '100%', mb: 4 }}>
-                <LinearProgress />
-              </Box>
-            ) : (
-              <Grid container spacing={3} mb={6}>
-                {getSummaryCards().map((card) => (
-                  <Grid item xs={12} sm={6} md={3} key={card.title}>
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.3, delay: 0.1 }}
+          {/* Summary cards */}
+          {loading ? (
+            <Box sx={{ width: '100%', mb: 6 }}>
+              <LinearProgress />
+            </Box>
+          ) : (
+            <Grid container spacing={3} mb={6}>
+              {getSummaryCards().map((card, index) => (
+                <Grid item xs={12} sm={6} md={3} key={card.title}>
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3, delay: index * 0.1 }}
+                  >
+                    <Card
+                      sx={{
+                        height: '100%',
+                        borderRadius: 3,
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+                        transition: 'all 0.3s',
+                        '&:hover': {
+                          transform: 'translateY(-4px)',
+                          boxShadow: '0 12px 28px rgba(0,0,0,0.12)',
+                        }
+                      }}
                     >
-                      <Paper
-                        elevation={2}
-                        sx={{
-                          p: 3,
-                          textAlign: 'center',
-                          height: '100%',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'center',
-                          borderTop: `4px solid ${card.color}`,
-                          borderRadius: '8px',
-                        }}
-                      >
-                        <Typography variant="h6" color="text.secondary" gutterBottom>
-                          {card.title}
-                        </Typography>
+                      <CardContent sx={{ p: 3 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                          <Typography variant="subtitle1" color="text.secondary" fontWeight="medium">
+                            {card.title}
+                          </Typography>
+                          <Box 
+                            sx={{ 
+                              bgcolor: `${card.color}15`, // 15% opacity of the color
+                              p: 1,
+                              borderRadius: 2
+                            }}
+                          >
+                            {card.icon}
+                          </Box>
+                        </Box>
                         <Typography variant="h3" component="div" sx={{ fontWeight: 'bold' }}>
                           {card.value}
                         </Typography>
-                      </Paper>
-                    </motion.div>
-                  </Grid>
-                ))}
-              </Grid>
-            )}
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                </Grid>
+              ))}
+            </Grid>
+          )}
             
-            {/* Recent Orders and Top Products */}
-            <Grid container spacing={3}>
-              {/* Recent Orders */}
-              <Grid item xs={12} md={7}>
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: 0.2 }}
+          {/* Recent Orders and Quick Actions */}
+          <Grid container spacing={4}>
+            {/* Recent Orders */}
+            <Grid item xs={12} md={7}>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.2 }}
+              >
+                <Card
+                  sx={{
+                    mb: 4,
+                    borderRadius: 3,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+                    overflow: 'hidden'
+                  }}
                 >
-                  <Paper
-                    sx={{
-                      p: 3,
-                      mb: 3,
-                      borderRadius: '8px',
-                      boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                      <Typography variant="h6">Recent Orders</Typography>
-                      <IconButton size="small" sx={{ visibility: loading ? 'hidden' : 'visible' }}>
-                        <MoreVertIcon />
-                      </IconButton>
+                  <CardContent sx={{ p: 0 }}>
+                    <Box sx={{ 
+                      p: 3, 
+                      borderBottom: '1px solid rgba(0,0,0,0.05)',
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center'
+                    }}>
+                      <Typography variant="h6" fontWeight="bold">Recent Orders</Typography>
+                      <Box sx={{ visibility: loading ? 'hidden' : 'visible' }}>
+                        <Button
+                          endIcon={<ArrowForwardIcon />}
+                          onClick={() => navigate('/orders')}
+                          sx={{ p: 0 }}
+                        >
+                          View All
+                        </Button>
+                      </Box>
                     </Box>
                     
-                    <Divider sx={{ mb: 2 }} />
-                    
                     {loading ? (
-                      <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-                        <LinearProgress sx={{ width: '100%' }} />
+                      <Box sx={{ p: 4, textAlign: 'center' }}>
+                        <CircularProgress color="primary" size={40} thickness={4} />
                       </Box>
                     ) : !recentOrders || !Array.isArray(recentOrders) || recentOrders.length === 0 ? (
-                      <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 6 }}>
                         No recent orders found
                       </Typography>
                     ) : (
-                      <>
+                      <List sx={{ p: 0 }}>
                         {recentOrders.map((order, index) => (
-                          <Box key={order.id || index}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 1.5 }}>
-                              <Box>
-                                <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
-                                  {order.orderNumber || order.id}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                  {order.customerName || order.customer?.name || 
-                                   (order.customerId ? `Customer #${order.customerId}` : 'Unknown Customer')}
-                                </Typography>
-                              </Box>
+                          <React.Fragment key={order.id || index}>
+                            <ListItem sx={{ px: 3, py: 2 }}>
+                              <ListItemAvatar>
+                                <Avatar 
+                                  sx={{ 
+                                    bgcolor: 
+                                      order.status === 'Completed' ? 'success.lighter' :
+                                      order.status === 'Pending' ? 'warning.lighter' :
+                                      'info.lighter',
+                                    color: 
+                                      order.status === 'Completed' ? 'success.main' :
+                                      order.status === 'Pending' ? 'warning.main' :
+                                      'info.main'
+                                  }}
+                                >
+                                  {(order.orderNumber || order.id || '').toString().charAt(0)}
+                                </Avatar>
+                              </ListItemAvatar>
+                              <ListItemText 
+                                primary={
+                                  <Typography variant="subtitle1" fontWeight="medium">
+                                    {order.orderNumber || order.id}
+                                  </Typography>
+                                }
+                                secondary={
+                                  <Typography variant="body2" color="text.secondary">
+                                    {order.customerName || order.customer?.name || 
+                                    (order.customerId ? `Customer #${order.customerId}` : 'Unknown Customer')}
+                                  </Typography>
+                                }
+                              />
                               <Box sx={{ textAlign: 'right' }}>
                                 <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
                                   {typeof order.total === 'number' 
@@ -426,95 +565,102 @@ const Dashboard = () => {
                                   label={order.status} 
                                   size="small" 
                                   color={
-                                    order.status === 'Completed' ? 'secondary' :
-                                    order.status === 'Delivered' ? 'success' :
+                                    order.status === 'Completed' ? 'success' :
+                                    order.status === 'Delivered' ? 'secondary' :
                                     order.status === 'Confirmed' ? 'info' :
                                     order.status === 'Shipped' ? 'primary' :
                                     order.status === 'Pending' ? 'warning' :
                                     order.status === 'Cancelled' ? 'error' : 'default'
                                   }
-                                  sx={{ fontWeight: 'medium', fontSize: '0.7rem' }}
+                                  sx={{ fontWeight: 'medium', mt: 0.5 }}
                                 />
                               </Box>
-                            </Box>
-                            {index < recentOrders.length - 1 && (
-                              <Divider />
-                            )}
-                          </Box>
+                            </ListItem>
+                            {index < recentOrders.length - 1 && <Divider component="li" />}
+                          </React.Fragment>
                         ))}
-                        
-                        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-                          <Button 
-                            variant="text" 
-                            size="small" 
-                            endIcon={<ArrowForwardIcon />}
-                            onClick={() => navigate('/orders?refresh=true')}
-                          >
-                            View All Orders
-                          </Button>
-                        </Box>
-                      </>
+                      </List>
                     )}
-                  </Paper>
-                </motion.div>
-              </Grid>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </Grid>
               
-              {/* Quick Actions */}
-              <Grid item xs={12} md={5}>
+            {/* Quick Actions */}
+            <Grid item xs={12} md={5}>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.3 }}
+              >
+                <Card
+                  sx={{
+                    mb: 4,
+                    borderRadius: 3,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+                    overflow: 'hidden'
+                  }}
+                >
+                  <CardContent sx={{ p: 0 }}>
+                    <Box sx={{ 
+                      p: 3, 
+                      borderBottom: '1px solid rgba(0,0,0,0.05)'
+                    }}>
+                      <Typography variant="h6" fontWeight="bold">Quick Actions</Typography>
+                    </Box>
+                    
+                    <Box sx={{ p: 3 }}>
+                      <Button
+                        variant="contained"
+                        fullWidth
+                        startIcon={<AddIcon />}
+                        sx={{ 
+                          mb: 2.5, 
+                          py: 1.5, 
+                          borderRadius: 2,
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                        }}
+                        onClick={() => navigate('/products')}
+                      >
+                        Add New Product
+                      </Button>
+                      
+                      <Button
+                        variant="outlined"
+                        fullWidth
+                        startIcon={<PeopleIcon />}
+                        sx={{ mb: 2.5, py: 1.5, borderRadius: 2 }}
+                        onClick={() => navigate('/customers')}
+                      >
+                        Add New Customer
+                      </Button>
+                      
+                      <Button
+                        variant="outlined"
+                        fullWidth
+                        startIcon={<OrdersIcon />}
+                        sx={{ py: 1.5, borderRadius: 2 }}
+                        onClick={() => navigate('/orders')}
+                      >
+                        Create New Order
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
+                
+                {/* Company Info Card */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: 0.3 }}
+                  transition={{ duration: 0.4, delay: 0.4 }}
                 >
-                  <Paper
-                    sx={{
-                      p: 3,
-                      mb: 3,
-                      borderRadius: '8px',
-                      boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
-                    }}
-                  >
-                    <Typography variant="h6" gutterBottom>
-                      Quick Actions
-                    </Typography>
-                    
-                    <Divider sx={{ mb: 2 }} />
-                    
-                    <Button
-                      variant="contained"
-                      fullWidth
-                      startIcon={<AddIcon />}
-                      sx={{ mb: 2 }}
-                      onClick={() => navigate('/products/new')}
-                    >
-                      Add New Product
-                    </Button>
-                    
-                    <Button
-                      variant="outlined"
-                      fullWidth
-                      startIcon={<PeopleIcon />}
-                      sx={{ mb: 2 }}
-                      onClick={() => navigate('/customers')}
-                    >
-                      Add New Customer
-                    </Button>
-                    
-                    <Button
-                      variant="outlined"
-                      fullWidth
-                      startIcon={<OrdersIcon />}
-                      onClick={() => navigate('/orders/new')}
-                    >
-                      Create New Order
-                    </Button>
-                  </Paper>
+                  
                 </motion.div>
-              </Grid>
+              </motion.div>
             </Grid>
-          </Container>
+          </Grid>
         </motion.div>
-      </Box>
+      </Container>
     </Box>
   );
 };

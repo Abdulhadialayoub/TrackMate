@@ -55,7 +55,7 @@ import {
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
-const apiBaseUrl = 'http://localhost:5105/api'; // DevPanel ile aynı olması için
+const apiBaseUrl = 'http://trackmate.runasp.net/api'; // DevPanel ile aynı olması için
 
 const api = axios.create({
   baseURL: apiBaseUrl,

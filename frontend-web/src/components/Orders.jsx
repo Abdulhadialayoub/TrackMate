@@ -715,9 +715,10 @@ const Orders = () => {
       
       // Parse the status value
       const statusValue = parseInt(formData.status) || 0;
+      const isCancelled = statusValue === 5;
       const isDraft = statusValue === 0;
-      const isCompleted = statusValue === 6; // Check if order is being set to Completed
-      const wasCompleted = isEditing && selectedOrder && selectedOrder.status === 6; // Check if it was already completed
+      const wasDraft = isEditing && selectedOrder && 
+                       (selectedOrder.status === 0 || selectedOrder.status === '0' || selectedOrder.status === 'Draft');
       
       // Find the string status for the backend
       const statusString = typeof formData.status === 'string' && isNaN(parseInt(formData.status)) 
@@ -896,13 +897,34 @@ const Orders = () => {
         // Update stock in these cases:
         // 1. New non-draft orders
         // 2. Existing orders changing from draft to non-draft
-        const shouldUpdateStock = !isDraft && (
-          !isEditing ||  // New orders that aren't drafts
-          (isEditing && selectedOrder && 
-           (selectedOrder.status === 0 || selectedOrder.status === '0' || selectedOrder.status === 'Draft')) // Editing from draft to non-draft
-        );
+        // 3. Don't update stock for Draft orders
+        // 4. Restore stock when order status changes to Cancelled (5)
         
-        if (shouldUpdateStock) {
+        // Handle stock updates based on order status
+        if (isCancelled && isEditing && selectedOrder) {
+          // Restore stock quantities when order is cancelled
+          console.log('Order cancelled - restoring previous stock quantities');
+          
+          for (const item of selectedOrder.items || []) {
+            const product = products.find(p => p.id === parseInt(item.productId));
+            if (!product) continue;
+            
+            const returnQuantity = parseInt(item.quantity) || 0;
+            const newStockQuantity = (product.stockQuantity || 0) + returnQuantity;
+            
+            try {
+              await productService.updateStock(product.id, newStockQuantity);
+              console.log(`Restored ${returnQuantity} units to product ${product.id}`);
+            } catch (error) {
+              console.error(`Failed to restore stock for product ${product.id}:`, error);
+            }
+          }
+        } else if (!isDraft && (!isEditing || wasDraft)) {
+          // Normal stock reduction for non-draft orders that are:
+          // - New orders that aren't drafts
+          // - Or existing orders changing from draft to non-draft
+          console.log('Processing stock update for non-draft order');
+          
           for (const item of formData.items) {
             const product = products.find(p => p.id === parseInt(item.productId));
             if (!product) continue;
@@ -912,13 +934,19 @@ const Orders = () => {
             
             try {
               await productService.updateStock(product.id, Math.max(0, newStockQuantity));
+              console.log(`Reduced ${requestedQuantity} units from product ${product.id}`);
             } catch (error) {
               console.error(`Failed to update stock for product ${product.id}:`, error);
             }
           }
+        } else {
+          console.log(`No stock updates needed for order with status: ${getStatusText(statusValue)}`);
         }
         
         // Update company revenue when an order is newly completed
+        const isCompleted = statusValue === 6; // Check if order is being set to Completed
+        const wasCompleted = isEditing && selectedOrder && selectedOrder.status === 6; // Check if it was already completed
+        
         if (isCompleted && !wasCompleted) {
           // Calculate the grand total to add to revenue
           const subtotal = calculateOrderTotal(formData.items);

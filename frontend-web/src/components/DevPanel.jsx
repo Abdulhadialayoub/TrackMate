@@ -51,7 +51,7 @@ import {
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
-const apiBaseUrl = 'http://localhost:5105/api'; // Make sure this matches your backend URL
+const apiBaseUrl = 'http://trackmate.runasp.net/api'; // Make sure this matches your backend URL
 
 const api = axios.create({
   baseURL: apiBaseUrl,
@@ -1370,84 +1370,9 @@ const DevPanel = () => {
         
         <Paper sx={{ p: 3 }}>
           <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
-              <Typography variant="subtitle1" color="primary" gutterBottom>
-                Global Settings
-              </Typography>
-              
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={maintenanceMode}
-                    onChange={(e) => setMaintenanceMode(e.target.checked)}
-                    name="maintenanceMode"
-                    color="primary"
-                  />
-                }
-                label="Maintenance Mode"
-              />
-              
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={userRegistration}
-                    onChange={(e) => setUserRegistration(e.target.checked)}
-                    name="userRegistration"
-                    color="primary"
-                  />
-                }
-                label="Allow User Registration"
-                sx={{ display: 'block', mt: 1 }}
-              />
-              
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={debugMode}
-                    onChange={(e) => setDebugMode(e.target.checked)}
-                    name="debugMode"
-                    color="primary"
-                  />
-                }
-                label="Debug Mode"
-                sx={{ display: 'block', mt: 1 }}
-              />
-            </Grid>
-            
-            <Grid item xs={12} md={6}>
-              <Typography variant="subtitle1" color="primary" gutterBottom>
-                User Settings
-              </Typography>
-              
-              <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel id="default-role-label">Default User Role</InputLabel>
-                <Select
-                  labelId="default-role-label"
-                  id="default-role"
-                  value={defaultUserRole}
-                  label="Default User Role"
-                  onChange={(e) => setDefaultUserRole(e.target.value)}
-                >
-                  {userRoles.map((role) => (
-                    <MenuItem key={role} value={role}>
-                      {role}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              
-              <TextField
-                label="System Email"
-                value={systemEmail}
-                onChange={(e) => setSystemEmail(e.target.value)}
-                fullWidth
-                type="email"
-              />
-            </Grid>
-            
+          
             <Grid item xs={12}>
-              <Divider sx={{ my: 2 }} />
-              
+            
               <Typography variant="subtitle1" color="primary" gutterBottom>
                 Email Configuration
               </Typography>
@@ -1517,15 +1442,7 @@ const DevPanel = () => {
             
             <Grid item xs={12}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
-                <Button
-                  variant="outlined"
-                  color="primary"
-                  onClick={sendTestEmail}
-                  disabled={loading.testEmail}
-                  startIcon={loading.testEmail ? <CircularProgress size={20} /> : <EmailIcon />}
-                >
-                  {loading.testEmail ? 'Sending...' : 'Send Test Email'}
-                </Button>
+                
                 <Button
                   variant="contained"
                   color="primary"

@@ -153,7 +153,7 @@ const AppLayout = () => {
       { text: 'Customers', icon: <PeopleIcon />, path: '/customers' },
       { text: 'Orders', icon: <OrdersIcon />, path: '/orders' },
       { text: 'Invoices', icon: <InvoicesIcon />, path: '/invoices' },
-      { text: 'Messages', icon: <EmailIcon />, path: '/messages' },
+      //{ text: 'Messages', icon: <EmailIcon />, path: '/messages' },
     ];
   };
   

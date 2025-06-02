@@ -27,6 +27,7 @@ import Notifications from './components/common/Notifications';
 import Categories from './components/Categories';
 import OrderAIAnalysis from './components/OrderAIAnalysis';
 import OrdersAIAnalysis from './components/OrdersAIAnalysis';
+import LandingPage from './pages/LandingPage';
 
 const theme = createTheme({
   palette: {
@@ -166,7 +167,7 @@ function App() {
         <CssBaseline />
         <Router>
           <Routes>
-            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             

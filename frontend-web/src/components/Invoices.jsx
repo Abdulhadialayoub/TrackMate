@@ -729,17 +729,7 @@ ${companyName}`
                 </Typography>
               )}
             </Box>
-            <Button 
-              variant="contained" 
-              color="primary" 
-              startIcon={<AddIcon />}
-              onClick={() => addNotification({
-                message: 'Invoice creation is coming soon!',
-                type: 'info'
-              })}
-            >
-              New Invoice
-            </Button>
+            
           </Box>
 
           <Paper sx={{ mb: 3, p: 2 }}>

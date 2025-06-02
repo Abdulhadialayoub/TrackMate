@@ -515,7 +515,7 @@ const Messages = () => {
       
       // Make a direct API request using fetch to get raw data
       const token = localStorage.getItem('token');
-      const response = await fetch('https://localhost:7092/api/message/logs', {
+      const response = await fetch('http://trackmate.runasp.net/api/message/logs', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

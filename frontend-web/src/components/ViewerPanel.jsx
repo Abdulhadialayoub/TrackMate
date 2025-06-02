@@ -40,7 +40,7 @@ import {
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:7092/api',
+  baseURL: 'http://trackmate.runasp.net/api',
   headers: {
     'Content-Type': 'application/json',
   },

@@ -388,7 +388,7 @@ const Products = () => {
             <TableRow>
               <TableCell>Name</TableCell>
               <TableCell>Code</TableCell>
-              <TableCell>Category</TableCell>
+              <TableCell></TableCell>
               <TableCell>Price</TableCell>
               <TableCell>Stock</TableCell>
               <TableCell>Status</TableCell>

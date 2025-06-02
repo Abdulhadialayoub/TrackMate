@@ -12,9 +12,12 @@ import {
   IconButton,
   Grid,
   Divider,
-  CircularProgress
+  CircularProgress,
+  Stepper,
+  Step,
+  StepLabel
 } from '@mui/material';
-import { Visibility, VisibilityOff } from '@mui/icons-material';
+import { Visibility, VisibilityOff, ArrowForward } from '@mui/icons-material';
 import { authService } from '../services/api';
 
 const Register = () => {
@@ -150,177 +153,225 @@ const Register = () => {
   };
 
   return (
-    <Container component="main" maxWidth="sm">
-      <Box
-        sx={{
-          marginTop: 6,
-          marginBottom: 6,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-        }}
-      >
+    <Box 
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
+        py: 4
+      }}
+    >
+      <Container component="main" maxWidth="md">
         <Paper
-          elevation={3}
+          elevation={4}
           sx={{
-            p: 4,
+            p: { xs: 3, md: 5 },
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             width: '100%',
+            borderRadius: 3,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
           }}
         >
-          <Typography component="h1" variant="h5" fontWeight="bold" color="primary">
-            TrackMate
-          </Typography>
-          <Typography component="h2" variant="h6" mt={1}>
-            Create New Account
-          </Typography>
+          <Box
+            sx={{ 
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              mb: 3
+            }}
+          >
+            <Typography component="h1" variant="h4" fontWeight="bold" color="primary" gutterBottom>
+              TrackMate
+            </Typography>
+            <Typography variant="h5" textAlign="center" gutterBottom>
+              Create New Account
+            </Typography>
+            <Typography variant="body1" color="text.secondary" textAlign="center">
+              Get started with TrackMate and transform your business management
+            </Typography>
+          </Box>
           
           {apiError && (
-            <Alert severity="error" sx={{ mt: 2, width: '100%' }}>
+            <Alert severity="error" sx={{ mt: 2, width: '100%', mb: 3 }}>
               {apiError}
             </Alert>
           )}
           
-          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2, width: '100%' }}>
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              id="companyName"
-              label="Company Name"
-              name="companyName"
-              autoComplete="organization"
-              autoFocus
-              value={formData.companyName}
-              onChange={handleChange}
-              error={!!errors.companyName}
-              helperText={errors.companyName}
-            />
+          <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h6" color="primary" gutterBottom>
+                Company Information
+              </Typography>
+              <TextField
+                required
+                fullWidth
+                id="companyName"
+                label="Company Name"
+                name="companyName"
+                autoComplete="organization"
+                autoFocus
+                value={formData.companyName}
+                onChange={handleChange}
+                error={!!errors.companyName}
+                helperText={errors.companyName}
+                variant="outlined"
+              />
+            </Box>
             
-            <Divider sx={{ my: 2 }}>Personal Information</Divider>
+            <Divider sx={{ my: 3 }} />
             
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  required
-                  fullWidth
-                  id="firstName"
-                  label="First Name"
-                  name="firstName"
-                  autoComplete="given-name"
-                  value={formData.firstName}
-                  onChange={handleChange}
-                  error={!!errors.firstName}
-                  helperText={errors.firstName}
-                />
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h6" color="primary" gutterBottom>
+                Personal Information
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    required
+                    fullWidth
+                    id="firstName"
+                    label="First Name"
+                    name="firstName"
+                    autoComplete="given-name"
+                    value={formData.firstName}
+                    onChange={handleChange}
+                    error={!!errors.firstName}
+                    helperText={errors.firstName}
+                    variant="outlined"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    required
+                    fullWidth
+                    id="lastName"
+                    label="Last Name"
+                    name="lastName"
+                    autoComplete="family-name"
+                    value={formData.lastName}
+                    onChange={handleChange}
+                    error={!!errors.lastName}
+                    helperText={errors.lastName}
+                    variant="outlined"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    required
+                    fullWidth
+                    id="email"
+                    label="Email Address"
+                    name="email"
+                    autoComplete="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    error={!!errors.email}
+                    helperText={errors.email}
+                    variant="outlined"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    required
+                    fullWidth
+                    id="phone"
+                    label="Phone Number"
+                    name="phone"
+                    autoComplete="tel"
+                    value={formData.phone}
+                    onChange={handleChange}
+                    error={!!errors.phone}
+                    helperText={errors.phone}
+                    variant="outlined"
+                  />
+                </Grid>
               </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  required
-                  fullWidth
-                  id="lastName"
-                  label="Last Name"
-                  name="lastName"
-                  autoComplete="family-name"
-                  value={formData.lastName}
-                  onChange={handleChange}
-                  error={!!errors.lastName}
-                  helperText={errors.lastName}
-                />
+            </Box>
+            
+            <Divider sx={{ my: 3 }} />
+            
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h6" color="primary" gutterBottom>
+                Security
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    required
+                    fullWidth
+                    name="password"
+                    label="Password"
+                    type={showPassword ? 'text' : 'password'}
+                    id="password"
+                    autoComplete="new-password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    error={!!errors.password}
+                    helperText={errors.password}
+                    variant="outlined"
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            aria-label="toggle password visibility"
+                            onClick={handleTogglePasswordVisibility}
+                            edge="end"
+                          >
+                            {showPassword ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    required
+                    fullWidth
+                    name="confirmPassword"
+                    label="Confirm Password"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    id="confirmPassword"
+                    autoComplete="new-password"
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    error={!!errors.confirmPassword}
+                    helperText={errors.confirmPassword}
+                    variant="outlined"
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            aria-label="toggle password visibility"
+                            onClick={handleToggleConfirmPasswordVisibility}
+                            edge="end"
+                          >
+                            {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
               </Grid>
-            </Grid>
-            
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              id="email"
-              label="Email Address"
-              name="email"
-              autoComplete="email"
-              value={formData.email}
-              onChange={handleChange}
-              error={!!errors.email}
-              helperText={errors.email}
-            />
-            
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              id="phone"
-              label="Phone Number"
-              name="phone"
-              autoComplete="tel"
-              value={formData.phone}
-              onChange={handleChange}
-              error={!!errors.phone}
-              helperText={errors.phone}
-            />
-            
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              name="password"
-              label="Password"
-              type={showPassword ? 'text' : 'password'}
-              id="password"
-              autoComplete="new-password"
-              value={formData.password}
-              onChange={handleChange}
-              error={!!errors.password}
-              helperText={errors.password}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      aria-label="toggle password visibility"
-                      onClick={handleTogglePasswordVisibility}
-                      edge="end"
-                    >
-                      {showPassword ? <VisibilityOff /> : <Visibility />}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-            />
-            
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              name="confirmPassword"
-              label="Confirm Password"
-              type={showConfirmPassword ? 'text' : 'password'}
-              id="confirmPassword"
-              autoComplete="new-password"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              error={!!errors.confirmPassword}
-              helperText={errors.confirmPassword}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      aria-label="toggle password visibility"
-                      onClick={handleToggleConfirmPasswordVisibility}
-                      edge="end"
-                    >
-                      {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-            />
+            </Box>
             
             <Button
               type="submit"
               fullWidth
               variant="contained"
-              sx={{ mt: 3, mb: 2, height: 48 }}
+              endIcon={<ArrowForward />}
+              sx={{ 
+                mt: 3, 
+                mb: 2, 
+                height: 56, 
+                fontSize: '1rem',
+                fontWeight: 'bold',
+                boxShadow: '0 4px 12px rgba(2, 132, 199, 0.2)'
+              }}
               disabled={loading}
             >
               {loading ? (
@@ -330,18 +381,25 @@ const Register = () => {
               )}
             </Button>
             
-            <Box sx={{ mt: 2, textAlign: 'center' }}>
-              <Typography variant="body2">
+            <Box sx={{ mt: 3, textAlign: 'center' }}>
+              <Typography variant="body1">
                 Already have an account?{' '}
-                <Link to="/login" style={{ color: theme => theme.palette.primary.main, textDecoration: 'none' }}>
+                <Link 
+                  to="/login" 
+                  style={{ 
+                    color: '#0284c7', 
+                    textDecoration: 'none',
+                    fontWeight: 'bold' 
+                  }}
+                >
                   Sign In
                 </Link>
               </Typography>
             </Box>
           </Box>
         </Paper>
-      </Box>
-    </Container>
+      </Container>
+    </Box>
   );
 };
 
