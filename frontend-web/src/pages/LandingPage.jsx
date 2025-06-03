@@ -168,9 +168,45 @@ const LandingPage = () => {
             </Grid>
             <Grid item xs={12} md={6} sx={{ display: 'flex', justifyContent: { xs: 'flex-start', md: 'flex-end' } }}>
               <Stack direction="row" spacing={2}>
-                <Button color="inherit" size="small">Terms</Button>
-                <Button color="inherit" size="small">Privacy</Button>
-                <Button color="inherit" size="small">Contact</Button>
+                
+               <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+  {/* LinkedIn Butonu */}
+  <a
+    href="https://www.linkedin.com/in/abdulhadi-eleyy%C3%BCb/"
+    target="_blank"
+    rel="noopener noreferrer"
+    style={{ textDecoration: 'none', color: 'inherit' }}
+  >
+    <Button color="inherit" size="small">
+      LinkedIn
+    </Button>
+  </a>
+
+  {/* Mail Adresi ve Mail Butonu */}
+  <span style={{ fontSize: '0.875rem', color: 'inherit' }}>
+    hadi244588@gmail.com
+  </span>
+  <a
+    href="mailto:hadi244588@gmail.com"
+    style={{ textDecoration: 'none', color: 'inherit' }}
+  >
+    <Button color="inherit" size="small">
+      Mail
+    </Button>
+  </a>
+
+  {/* GitHub Butonu */}
+  <a
+    href="https://github.com/Abdulhadialayoub"
+    target="_blank"
+    rel="noopener noreferrer"
+    style={{ textDecoration: 'none', color: 'inherit' }}
+  >
+    <Button color="inherit" size="small">
+      GitHub
+    </Button>
+  </a>
+</div>
               </Stack>
             </Grid>
           </Grid>
