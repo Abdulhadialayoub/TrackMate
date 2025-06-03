@@ -28,10 +28,24 @@ TrackMate, küçük, orta ve büyük ölçekli işletmeler için geliştirilmiş
 🇸 Çok Şirketli Mimari - Her şirketin verileri izole edilmiştir.
 🌐 Gücülü Admin Paneli - Tüm sistem bileşenleri merkezi olarak yönetilebilir.
 🛠️ Otomatik Bildirimler - Müşteri bildirimleri için e-posta entegrasyonu.
-🏆 Esnek Raporlama - Özelleştirilebilir rapor şablonları (Excel, PDF).
+🏆 Esnek Raporlama - Özelleştirilebilir rapor şablonları (PDF).
 🔒 Yetkilendirme Sistemi - Şirket, rol ve kullanıcı bazlı erişim kontrolleri.
 🤖 Yapay Zeka Entegrasyonu - Google Gemini API ile akıllı analiz.
+## 📱 Mobil Uygulama Görünümü
 
+TrackMate mobil uygulaması, modern ve kullanıcı dostu arayüzüyle işletmelerin ceplerinde!
+
+![Mobil Uygulama Görselleri](docs/screenshots/mobile.png)
+
+## 💻 Web Arayüzü
+
+TrackMate web paneli, şirketlerin yönetimini sade ve güçlü bir arayüzle sunar.
+
+![Web Arayüzü Görselleri](docs/screenshots/web.png)
+## 🔗 Canlı Proje
+
+[🟢 TrackMate Web Uygulaması](https://track-mate-hazel.vercel.app) – Şirketlerinizi yönetin, fatura oluşturun, raporları görüntüleyin ve daha fazlasını keşfedin.
+---
 ## 🧠 Yapay Zeka Entegrasyonu
 TrackMate, Google Gemini API kullanılarak gelişmiş yapay zeka özellikleri sağlamaktadır.
 
