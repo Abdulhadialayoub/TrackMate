@@ -1995,16 +1995,7 @@ const Orders = () => {
                         <TableCell align="right">
                           <Tooltip title="Edit">
                             <span>
-                              <IconButton 
-                                size="small" 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenDialog(order);
-                                }}
-                                color="primary"
-                              >
-                                <EditIcon />
-                              </IconButton>
+                              
                             </span>
                           </Tooltip>
                           <Tooltip title="Create Invoice">
