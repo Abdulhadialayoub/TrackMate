@@ -1,138 +1,128 @@
-# TrackMate Frontend Web
+# 🏢 TrackMate - İş Otomasyon Sistemi
 
-## Proje Hakkında
+## 🚀 Proje Amacı
 
-TrackMate Frontend Web, TrackMate iş yönetim sisteminin kullanıcı arayüzüdür. React ve Material UI kullanılarak geliştirilmiş bu modern web uygulaması, işletmelerin sipariş takibi, müşteri yönetimi, fatura oluşturma ve diğer önemli iş süreçlerini kolaylaştırmak için tasarlanmıştır.
+- İş süreçlerini dijitalleştirerek verimliliği artırmak
+- Birden fazla şirketin tek sistem üzerinden yönetimini sağlamak
+- Güvenli ve yetkilendirilmiş bir kullanıcı yönetim sistemi oluşturmak
+- Fatura ve belge işlemlerini kolaylaştırmak
+- Merkezi admin paneli ile sistem yönetimini basitleştirmek
 
-## Teknoloji Yığını
+## 🎯 Hedef Kitle
 
-- **Framework**: React 18
-- **Build Tool**: Vite
-- **UI Kütüphanesi**: Material UI (MUI)
-- **CSS Framework**: Tailwind CSS
-- **Routing**: React Router v6
-- **HTTP İstemcisi**: Axios
-- **Animasyon**: Framer Motion
-- **AI Entegrasyonu**: Gradio Client
-- **Linting**: ESLint
+TrackMate, küçük, orta ve büyük ölçekli işletmeler için geliştirilmiş bir iş otomasyon sistemidir. Özellikle:
+- Holdingler
+- Muhasebe departmanları
+- Mobil ve web üzerinden operasyonları yönetmek isteyenler
+- AI destekli karar mekanizması isteyen danışmanlar ve yöneticiler
 
-## Kurulum ve Çalıştırma
+---
 
-### Gereksinimler
+## 💻 Web Uygulaması (Frontend Web)
 
-- Node.js 18.x veya üzeri
-- npm veya yarn
-- Backend API'nin çalışır durumda olması
+TrackMate Web, React + Vite ile geliştirilmiştir.
 
-### Adımlar
+### Teknoloji Yığını
 
-1. Projeyi klonlayın
-2. Bağımlılıkları yükleyin:
-   ```
-   npm install
-   ```
-3. Geliştirme sunucusunu başlatın:
-   ```
-   npm run dev
-   ```
-4. Tarayıcınızda `http://localhost:5173` adresine gidin
+- React 18
+- Vite
+- Material UI (MUI)
+- Tailwind CSS
+- React Router v6
+- Axios
+- Framer Motion
+- ESLint
+- JWT tabanlı kimlik doğrulama
 
-### Derleme
+### Kurulum
 
-Projeyi production için derlemek:
-```
-npm run build
-```
+```bash
+cd frontend-web
+npm install
+npm run dev
+📍 http://localhost:5173
 
-## Proje Yapısı
+📱 Mobil Uygulama (Frontend Mobile)
+React Native + Expo ile geliştirilmiştir. Mobil cihazdan çalıştırmak için QR kod ile Expo Go kullanılabilir.
 
-- **src/assets**: Statik kaynaklar (görseller, fontlar, vs.)
-- **src/components**: Yeniden kullanılabilir UI bileşenleri
-  - **src/components/common**: Ortak UI bileşenleri
-  - **src/components/layout**: Sayfa düzeni bileşenleri
-- **src/context**: React context API ile durum yönetimi
-- **src/pages**: Ana sayfa bileşenleri
-- **src/services**: API ile iletişim kuran servisler
-- **src/utils**: Yardımcı fonksiyonlar ve araçlar
+Kurulum
+bash
+Copy
+Edit
+cd frontend-mobile
+npm install
+npx expo start
+🔁 CORS sorunu için src/context.js içindeki API IP’si cihazla eşleştirilmelidir.
 
-## Ana Özellikler
+🧠 Yapay Zeka Özellikleri (Google Gemini API)
+API Entegrasyonu
+/api/ai/analyze-order – Tek sipariş analizi
 
-### Dashboard
+/api/ai/analyze-orders – Toplu sipariş analizi
 
-- İş performansına genel bakış
-- Satış, sipariş ve fatura istatistikleri
-- Son etkinlikler ve bildirimler
+Teknik Altyapı
+AIController
 
-### Sipariş Yönetimi
+GoogleAIService
 
-- Yeni sipariş oluşturma ve düzenleme
-- Sipariş durumu takibi
-- Sipariş analizi (AI destekli)
-- Sipariş arama ve filtreleme
+JWT ile güvenlik
 
-### Müşteri Yönetimi
+Timeout ve hata yönetimi
 
-- Müşteri bilgilerini kaydetme ve düzenleme
-- Müşteri geçmişi görüntüleme
-- İletişim kaydı tutma
+Model: gemini-2.0-flash
 
-### Ürün ve Kategori Yönetimi
+🧱 Proje Yapısı
+bash
+Copy
+Edit
+TrackMate/
+│── backend/              # ASP.NET API  
+│── frontend-web/         # Web Arayüzü  
+│── frontend-mobile/      # Mobil Arayüz  
+│── docs/                 # Belgeler  
+│── README.md             # Açıklama Dosyası
+📦 Backend API (ASP.NET)
+Çalıştırmak için:
+bash
+Copy
+Edit
+cd backend
+dotnet restore
+dotnet run
+📍 http://localhost:5105
 
-- Ürün kataloğu oluşturma
-- Kategorileri yönetme
-- Stok takibi
+🌟 Özellikler
+🌐 Çok şirketli mimari
 
-### Fatura İşlemleri
+📊 Dashboard ve istatistik panelleri
 
-- Siparişlerden otomatik fatura oluşturma
-- PDF fatura indirme
-- E-posta ile fatura gönderme
+🧾 Fatura oluşturma ve PDF indirme
 
-### Mesajlaşma ve İletişim
+🔒 Rol tabanlı kullanıcı yetkilendirme
 
-- Müşteri mesajlaşma sistemi
-- Otomatik mesaj yanıtlama (AI destekli)
-- İletişim geçmişi
+🤖 Yapay zeka destekli sipariş analizi
 
-### Kullanıcı Yönetimi
+📧 Otomatik e-posta bildirimi
 
-- Kullanıcı profili ve ayarları
-- Rol tabanlı erişim kontrolü
-- Kullanıcı yetkilendirme
+📱 Mobil ve responsive arayüz
 
-### Ayarlar ve Konfigürasyon
+📅 İş Takvimi
+ Backend API
 
-- Şirket bilgileri yapılandırma
-- E-posta şablonları
-- Sistem ayarları
+ Web Arayüzü
 
-## API Entegrasyonu
+ Mobil Uygulama
 
-Frontend, `/src/services/api.js` aracılığıyla TrackMate.API ile iletişim kurar. Tüm API istekleri, JWT token kimlik doğrulaması kullanılarak güvenli bir şekilde yapılır.
+ AI Entegrasyonu
 
-## Rol Tabanlı Erişim
+📧 İletişim
+Geliştirici: Abdulhadi ELEYYÜB
+Danışmanlar: Öğr.Gör. Eyüp ERÖZ, Dr. Öğr. Üyesi Vahdettin Cem BAYDOĞAN
+📩 abdulhadialayoub@gmail.com
 
-Uygulama, farklı kullanıcı rolleri için özelleştirilmiş erişim sağlar:
+🔗 Canlı Demo
+🟢 TrackMate Web Uygulaması
 
-- **Admin**: Tam sistem erişimi
-- **Manager**: İş süreçleri ve kullanıcı yönetimi
-- **User**: Temel operasyonlar
-- **Viewer**: Salt görüntüleme erişimi
-- **Dev**: Geliştirici özellikleri
-
-## Theme ve Tasarım
-
-Uygulama, özelleştirilmiş bir Material UI teması kullanır:
-
-- Modern ve temiz UI tasarımı
-- Duyarlı (responsive) tasarım
-- Koyu mod desteği
-- Özelleştirilebilir renk paleti
-
-## Geliştirme ve Katkıda Bulunma
-
-1. Projeyi forklayın
-2. Feature branch oluşturun (`git checkout -b feature/amazing-feature`)
-3. Değişikliklerinizi commit edin (`git commit -m 'Add some amazing feature'`)
-4. Branch'inizi push edin (`git push origin feature/amazing-feature`)
-5. Pull Request oluşturun
+yaml
+Copy
+Edit

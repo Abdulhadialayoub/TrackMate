@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Paper,
@@ -21,7 +22,11 @@ import {
   InputAdornment,
   useTheme,
   alpha,
-  Tooltip
+  Tooltip,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel
 } from '@mui/material';
 import {
   Person as PersonIcon,
@@ -37,13 +42,15 @@ import {
   Refresh as RefreshIcon,
   AccountCircle as AccountCircleIcon,
   Work as WorkIcon,
-  Business as BusinessIcon
+  Business as BusinessIcon,
+  Translate as TranslateIcon
 } from '@mui/icons-material';
 import { userService } from '../services/api';
 import { useAppContext } from '../context/AppContext';
 
 const UserProfile = () => {
   const theme = useTheme();
+  const { t, i18n } = useTranslation();
   const { user, addNotification } = useAppContext();
   const [profileData, setProfileData] = useState({
     firstName: '',
@@ -88,7 +95,14 @@ const UserProfile = () => {
       ];
       setAvatarColor(colors[hash % colors.length]);
     }
-  }, []);
+  }, [user?.email, i18n.language]);
+
+  useEffect(() => {
+    const savedLang = localStorage.getItem('i18nextLng');
+    if (savedLang) {
+      i18n.changeLanguage(savedLang);
+    }
+  }, [i18n]);
 
   const fetchUserProfile = async () => {
     setLoading(true);
@@ -108,14 +122,14 @@ const UserProfile = () => {
       } else {
         setError(result.message);
         addNotification({
-          message: result.message,
+          message: t('profile.messages.fetchError'),
           type: 'error'
         });
       }
     } catch (err) {
-      setError('Failed to fetch user profile');
+      setError(t('profile.messages.fetchError'));
       addNotification({
-        message: 'Failed to fetch user profile',
+        message: t('profile.messages.fetchError'),
         type: 'error'
       });
     } finally {
@@ -152,36 +166,34 @@ const UserProfile = () => {
     try {
       const userId = localStorage.getItem('user_id');
       if (!userId) {
-        throw new Error('User ID not found');
+        throw new Error(t('profile.messages.userIdError'));
       }
 
-      // Create complete user data with required fields
       const completeUserData = {
         ...profileData,
-        // Include required fields that might not be in the form
         id: userId,
-        username: profileData.username || profileData.email, // Use email as username if not provided
-        role: user.role, // Preserve the user's role
-        isActive: true // Set isActive to true for profile updates
+        username: profileData.username || profileData.email,
+        role: user.role,
+        isActive: true
       };
 
       const result = await userService.updateUser(userId, completeUserData);
       if (result.success) {
         addNotification({
-          message: 'Profile updated successfully',
+          message: t('profile.messages.updateSuccess'),
           type: 'success'
         });
       } else {
         setError(result.message);
         addNotification({
-          message: result.message,
+          message: t('profile.messages.updateError'),
           type: 'error'
         });
       }
     } catch (err) {
-      setError('Failed to update profile');
+      setError(t('profile.messages.updateError'));
       addNotification({
-        message: 'Failed to update profile',
+        message: t('profile.messages.updateError'),
         type: 'error'
       });
     } finally {
@@ -190,14 +202,13 @@ const UserProfile = () => {
   };
 
   const handlePasswordSubmit = async () => {
-    // Validate passwords
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setPasswordError('New passwords do not match');
+      setPasswordError(t('profile.password.mismatch'));
       return;
     }
 
     if (passwordData.newPassword.length < 8) {
-      setPasswordError('Password must be at least 8 characters long');
+      setPasswordError(t('profile.password.tooShort'));
       return;
     }
 
@@ -205,7 +216,7 @@ const UserProfile = () => {
     try {
       const userId = localStorage.getItem('user_id');
       if (!userId) {
-        throw new Error('User ID not found');
+        throw new Error(t('profile.messages.userIdError'));
       }
 
       const result = await userService.updatePassword(userId, {
@@ -215,7 +226,7 @@ const UserProfile = () => {
 
       if (result.success) {
         addNotification({
-          message: 'Password updated successfully',
+          message: t('profile.password.updateSuccess'),
           type: 'success'
         });
         setOpenPasswordDialog(false);
@@ -229,7 +240,7 @@ const UserProfile = () => {
         setPasswordError(result.message);
       }
     } catch (err) {
-      setPasswordError('Failed to update password');
+      setPasswordError(t('profile.password.updateError'));
     } finally {
       setSaving(false);
     }
@@ -240,6 +251,12 @@ const UserProfile = () => {
       return `${profileData.firstName.charAt(0)}${profileData.lastName.charAt(0)}`;
     }
     return user?.email?.charAt(0).toUpperCase() || 'U';
+  };
+
+  const handleLanguageChange = (event) => {
+    const newLang = event.target.value;
+    localStorage.setItem('i18nextLng', newLang);
+    i18n.changeLanguage(newLang);
   };
 
   if (loading) {
@@ -254,13 +271,33 @@ const UserProfile = () => {
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" component="h1" gutterBottom>
-          User Profile
+          {t('profile.title')}
         </Typography>
-        <Tooltip title="Refresh Profile Data">
-          <IconButton onClick={fetchUserProfile} disabled={loading}>
-            <RefreshIcon />
-          </IconButton>
-        </Tooltip>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <Select
+              value={i18n.language}
+              onChange={handleLanguageChange}
+              startAdornment={
+                <InputAdornment position="start">
+                  <TranslateIcon sx={{ mr: 1 }} />
+                </InputAdornment>
+              }
+            >
+              <MenuItem value="en">English</MenuItem>
+              <MenuItem value="tr">Türkçe</MenuItem>
+            </Select>
+          </FormControl>
+          <Tooltip title={t('profile.refreshProfile')}>
+            <IconButton
+              onClick={fetchUserProfile}
+              disabled={loading}
+              sx={{ ml: 2 }}
+            >
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </Box>
 
       {error && (
@@ -269,399 +306,283 @@ const UserProfile = () => {
         </Alert>
       )}
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={4}>
-          <Card 
-            elevation={3} 
-            sx={{
-              borderRadius: 2,
-              overflow: 'hidden',
-              height: '100%'
-            }}
+      <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
+        <Avatar
+          sx={{
+            width: 100,
+            height: 100,
+            bgcolor: avatarColor,
+            fontSize: '2rem'
+          }}
+        >
+          {getInitials()}
+        </Avatar>
+        <Box>
+          <Typography variant="h5">
+            {profileData.firstName
+              ? `${profileData.firstName} ${profileData.lastName}`
+              : profileData.username}
+          </Typography>
+          <Typography color="textSecondary">
+            {t(`profile.roles.${profileData.role?.toLowerCase()}`)}
+          </Typography>
+          <Typography color="textSecondary">
+            {t('profile.fields.phone')}: {profileData.phone || t('profile.fields.notProvided')}
+          </Typography>
+          <Typography color="textSecondary">
+            {t('profile.fields.lastLogin')}: {new Date(profileData.lastLogin).toLocaleString()}
+          </Typography>
+        </Box>
+        <Box sx={{ marginLeft: 'auto' }}>
+          <Button
+            variant="outlined"
+            startIcon={<LockIcon />}
+            onClick={() => setOpenPasswordDialog(true)}
           >
-            <Box 
-              sx={{
-                height: 120,
-                bgcolor: 'primary.main',
-                backgroundImage: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-                display: 'flex',
-                justifyContent: 'center',
-                position: 'relative'
-              }}
-            >
-              <Avatar
-                sx={{
-                  width: 120,
-                  height: 120,
-                  fontSize: 48,
-                  position: 'absolute',
-                  top: 60,
-                  border: '4px solid #fff',
-                  boxShadow: '0 4px 10px rgba(0,0,0,0.15)',
-                  bgcolor: avatarColor
-                }}
-              >
-                {getInitials()}
-              </Avatar>
-            </Box>
-            
-            <CardContent sx={{ pt: 8, pb: 3, px: 3, textAlign: 'center' }}>
-              <Typography variant="h5" fontWeight="bold" gutterBottom>
-                {profileData.firstName} {profileData.lastName}
-              </Typography>
-              <Typography 
-                variant="body2" 
-                color="textSecondary" 
-                sx={{ 
-                  mb: 2,
-                  display: 'inline-block',
-                  px: 2,
-                  py: 0.5,
-                  bgcolor: alpha(theme.palette.primary.main, 0.1),
-                  borderRadius: 1,
-                  color: 'primary.main',
-                  fontWeight: 'medium'
-                }}
-              >
-                {profileData.role}
-              </Typography>
+            {t('profile.password.change')}
+          </Button>
+        </Box>
+      </Box>
 
-              <Divider sx={{ width: '100%', my: 2 }} />
+      <Card>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+            <PersonIcon sx={{ mr: 1 }} />
+            <Typography variant="h6">{t('profile.editProfileInformation')}</Typography>
+          </Box>
+          <form onSubmit={handleSubmit}>
+            <Grid container spacing={3}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  name="firstName"
+                  label={t('profile.fields.firstName')}
+                  value={profileData.firstName}
+                  onChange={handleInputChange}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <PersonIcon />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  name="lastName"
+                  label={t('profile.fields.lastName')}
+                  value={profileData.lastName}
+                  onChange={handleInputChange}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <PersonIcon />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  name="email"
+                  label={t('profile.fields.emailAddress')}
+                  value={profileData.email}
+                  onChange={handleInputChange}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <EmailIcon />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  name="phone"
+                  label={t('profile.fields.phoneNumber')}
+                  value={profileData.phone}
+                  onChange={handleInputChange}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <PhoneIcon />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+            </Grid>
 
-              <Box sx={{ width: '100%', textAlign: 'left', mt: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <EmailIcon sx={{ mr: 2, color: 'primary.main' }} />
-                  <Box>
-                    <Typography variant="body2" color="textSecondary">Email</Typography>
-                    <Typography>{profileData.email}</Typography>
-                  </Box>
-                </Box>
-                
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <PhoneIcon sx={{ mr: 2, color: 'primary.main' }} />
-                  <Box>
-                    <Typography variant="body2" color="textSecondary">Phone</Typography>
-                    <Typography>{profileData.phone || 'Not provided'}</Typography>
-                  </Box>
-                </Box>
-
-                
-                
-                
-
-                {profileData.lastLogin && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <KeyIcon sx={{ mr: 2, color: 'primary.main' }} />
-                    <Box>
-                      <Typography variant="body2" color="textSecondary">Last Login</Typography>
-                      <Typography>
-                        {new Date(profileData.lastLogin).toLocaleString()}
-                      </Typography>
-                    </Box>
-                  </Box>
-                )}
-              </Box>
-
+            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
               <Button
-                variant="contained"
-                startIcon={<LockIcon />}
-                onClick={() => setOpenPasswordDialog(true)}
-                sx={{ 
-                  mt: 3,
-                  width: '100%',
-                  py: 1.2,
-                  borderRadius: 2,
-                  boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
-                }}
+                variant="outlined"
+                onClick={fetchUserProfile}
+                startIcon={<RefreshIcon />}
+                disabled={loading || saving}
               >
-                Change Password
+                {t('profile.refreshProfile')}
               </Button>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={8}>
-          <Paper 
-            elevation={3} 
-            sx={{ 
-              borderRadius: 2,
-              p: 3,
-              overflow: 'hidden'
-            }}
-          >
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              mb: 3
-            }}>
-              <EditIcon sx={{ mr: 1, color: 'primary.main' }} />
-              <Typography variant="h5" fontWeight="medium">
-                Edit Profile Information
-              </Typography>
+              <Button
+                type="submit"
+                variant="contained"
+                color="primary"
+                startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
+                disabled={loading || saving}
+              >
+                {saving ? t('profile.buttons.saving') : t('profile.buttons.save')}
+              </Button>
             </Box>
-            
-            <Divider sx={{ mb: 3 }} />
+          </form>
+        </CardContent>
+      </Card>
 
-            <form onSubmit={handleSubmit}>
-              <Grid container spacing={3}>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    name="firstName"
-                    label="First Name"
-                    value={profileData.firstName}
-                    onChange={handleInputChange}
-                    fullWidth
-                    required
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <PersonIcon color="primary" />
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    name="lastName"
-                    label="Last Name"
-                    value={profileData.lastName}
-                    onChange={handleInputChange}
-                    fullWidth
-                    required
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <PersonIcon color="primary" />
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    name="email"
-                    label="Email Address"
-                    type="email"
-                    value={profileData.email}
-                    onChange={handleInputChange}
-                    fullWidth
-                    required
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <EmailIcon color="primary" />
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    name="phone"
-                    label="Phone Number"
-                    value={profileData.phone}
-                    onChange={handleInputChange}
-                    fullWidth
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <PhoneIcon color="primary" />
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Grid>
-                
-                
-                
-                
-              
-                <Grid item xs={12}>
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    color="primary"
-                    size="large"
-                    startIcon={saving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
-                    disabled={saving}
-                    sx={{ 
-                      mt: 2, 
-                      px: 4, 
-                      py: 1.2,
-                      borderRadius: 2,
-                      boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
-                    }}
-                  >
-                    {saving ? 'Saving Changes...' : 'Save Profile Changes'}
-                  </Button>
-                </Grid>
-              </Grid>
-            </form>
-          </Paper>
-          
-          <Paper 
-            elevation={3} 
-            sx={{ 
-              borderRadius: 2,
-              p: 3,
-              mt: 3,
-              bgcolor: alpha(theme.palette.info.main, 0.05)
-            }}
-          >
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center',
-              justifyContent: 'space-between'
-            }}>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <BadgeIcon sx={{ color: 'info.main', mr: 1 }} />
-                <Typography variant="h6" color="info.main">
-                  Account Information
-                </Typography>
-              </Box>
-            </Box>
-
-            <Grid container spacing={2} sx={{ mt: 2 }}>
-              <Grid item xs={12} sm={6}>
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" color="textSecondary">Username</Typography>
-                  <Typography fontWeight="medium">{profileData.username}</Typography>
-                </Box>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" color="textSecondary">Role</Typography>
-                  <Typography fontWeight="medium">{profileData.role}</Typography>
-                </Box>
-              </Grid>
-              <Grid item xs={12}>
-                <Typography variant="body2" color="textSecondary">
-                  * Username and role cannot be changed from this interface. Please contact your administrator if you need these details updated.
-                </Typography>
-              </Grid>
-            </Grid>
-          </Paper>
-        </Grid>
-      </Grid>
-
-      {/* Change Password Dialog */}
-      <Dialog 
-        open={openPasswordDialog} 
-        onClose={() => !saving && setOpenPasswordDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle sx={{ 
-          borderBottom: `1px solid ${theme.palette.divider}`, 
-          pb: 2,
-          display: 'flex',
-          alignItems: 'center'
-        }}>
-          <LockIcon sx={{ mr: 1, color: 'primary.main' }} />
-          Change Password
-        </DialogTitle>
-        <DialogContent sx={{ pt: 3 }}>
+      <Card sx={{ mt: 4 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <AccountCircleIcon sx={{ mr: 1 }} />
+            <Typography variant="h6">{t('profile.accountInformation')}</Typography>
+          </Box>
           <Grid container spacing={3}>
-            {passwordError && (
-              <Grid item xs={12}>
-                <Alert severity="error" sx={{ mb: 1 }}>{passwordError}</Alert>
-              </Grid>
-            )}
-            <Grid item xs={12}>
+            <Grid item xs={12} sm={6}>
               <TextField
-                name="currentPassword"
-                label="Current Password"
-                type={showPassword.currentPassword ? 'text' : 'password'}
-                value={passwordData.currentPassword}
-                onChange={handlePasswordInputChange}
                 fullWidth
-                required
+                disabled
+                label={t('profile.fields.username')}
+                value={profileData.username}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
-                      <KeyIcon color="primary" />
+                      <PersonIcon />
                     </InputAdornment>
                   ),
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        onClick={() => handleClickShowPassword('currentPassword')}
-                        edge="end"
-                      >
-                        {showPassword.currentPassword ? <VisibilityIcon /> : <VisibilityOffIcon />}
-                      </IconButton>
-                    </InputAdornment>
-                  )
                 }}
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid item xs={12} sm={6}>
               <TextField
-                name="newPassword"
-                label="New Password"
-                type={showPassword.newPassword ? 'text' : 'password'}
-                value={passwordData.newPassword}
-                onChange={handlePasswordInputChange}
                 fullWidth
-                required
-                helperText="Password must be at least 8 characters long"
+                disabled
+                label={t('profile.fields.role')}
+                value={t(`profile.roles.${profileData.role?.toLowerCase()}`)}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
-                      <LockIcon color="primary" />
+                      <BadgeIcon />
                     </InputAdornment>
                   ),
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        onClick={() => handleClickShowPassword('newPassword')}
-                        edge="end"
-                      >
-                        {showPassword.newPassword ? <VisibilityIcon /> : <VisibilityOffIcon />}
-                      </IconButton>
-                    </InputAdornment>
-                  )
-                }}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                name="confirmPassword"
-                label="Confirm New Password"
-                type={showPassword.confirmPassword ? 'text' : 'password'}
-                value={passwordData.confirmPassword}
-                onChange={handlePasswordInputChange}
-                fullWidth
-                required
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <LockIcon color="primary" />
-                    </InputAdornment>
-                  ),
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        onClick={() => handleClickShowPassword('confirmPassword')}
-                        edge="end"
-                      >
-                        {showPassword.confirmPassword ? <VisibilityIcon /> : <VisibilityOffIcon />}
-                      </IconButton>
-                    </InputAdornment>
-                  )
                 }}
               />
             </Grid>
           </Grid>
+          <Typography variant="body2" color="textSecondary" sx={{ mt: 2 }}>
+            {t('profile.accountUpdateNote')}
+          </Typography>
+        </CardContent>
+      </Card>
+
+      <Dialog open={openPasswordDialog} onClose={() => setOpenPasswordDialog(false)}>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <LockIcon sx={{ mr: 1 }} />
+            {t('profile.password.change')}
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <TextField
+              fullWidth
+              margin="dense"
+              name="currentPassword"
+              label={t('profile.password.current')}
+              type={showPassword.currentPassword ? 'text' : 'password'}
+              value={passwordData.currentPassword}
+              onChange={handlePasswordInputChange}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <KeyIcon />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => handleClickShowPassword('currentPassword')}
+                      edge="end"
+                    >
+                      {showPassword.currentPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <TextField
+              fullWidth
+              margin="dense"
+              name="newPassword"
+              label={t('profile.password.new')}
+              type={showPassword.newPassword ? 'text' : 'password'}
+              value={passwordData.newPassword}
+              onChange={handlePasswordInputChange}
+              helperText={t('profile.password.requirement')}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <LockIcon />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => handleClickShowPassword('newPassword')}
+                      edge="end"
+                    >
+                      {showPassword.newPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <TextField
+              fullWidth
+              margin="dense"
+              name="confirmPassword"
+              label={t('profile.password.confirm')}
+              type={showPassword.confirmPassword ? 'text' : 'password'}
+              value={passwordData.confirmPassword}
+              onChange={handlePasswordInputChange}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <LockIcon />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => handleClickShowPassword('confirmPassword')}
+                      edge="end"
+                    >
+                      {showPassword.confirmPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            {passwordError && (
+              <Alert severity="error" sx={{ mt: 2 }}>
+                {passwordError}
+              </Alert>
+            )}
+          </Box>
         </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
-          <Button 
-            onClick={() => setOpenPasswordDialog(false)} 
-            disabled={saving}
-            variant="outlined"
-          >
-            Cancel
+        <DialogActions>
+          <Button onClick={() => setOpenPasswordDialog(false)}>
+            {t('profile.buttons.cancel')}
           </Button>
           <Button
             onClick={handlePasswordSubmit}
@@ -670,7 +591,7 @@ const UserProfile = () => {
             disabled={saving}
             startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
           >
-            {saving ? 'Updating...' : 'Update Password'}
+            {saving ? t('profile.buttons.updating') : t('profile.buttons.update')}
           </Button>
         </DialogActions>
       </Dialog>

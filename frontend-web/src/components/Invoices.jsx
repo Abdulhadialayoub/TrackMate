@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   Box, 
   Button, 
@@ -52,6 +53,7 @@ const invoiceStatuses = [
 ];
 
 const Invoices = () => {
+  const { t } = useTranslation();
   const { addNotification, companyInfo } = useAppContext();
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -125,10 +127,8 @@ const Invoices = () => {
   const fetchInvoices = async () => {
     setLoading(true);
     try {
-      // Get company ID from context or localStorage
       let currentCompanyId = companyInfo?.id;
       
-      // If not in context, try to get from localStorage
       if (!currentCompanyId) {
         const companyIdFromStorage = localStorage.getItem('company_id');
         if (companyIdFromStorage) {
@@ -142,11 +142,9 @@ const Invoices = () => {
       let result;
       
       if (currentCompanyId) {
-        // Use the company-specific endpoint
         console.log(`Fetching invoices for company ID: ${currentCompanyId}`);
         result = await invoiceService.getByCompanyId(currentCompanyId);
       } else {
-        // Fallback to getting all invoices
         console.warn('No company ID available, fetching all invoices');
         result = await invoiceService.getAll();
       }
@@ -156,14 +154,12 @@ const Invoices = () => {
         console.log(`Received ${invoiceData.length} invoices from API`);
         console.log('Full invoice data structure:', JSON.stringify(invoiceData, null, 2));
         
-        // If we have invoices but they are missing details, fetch each one individually
         if (invoiceData.length > 0 && 
             (!invoiceData[0].customer || !invoiceData[0].invoiceItems || 
              !invoiceData[0].customerName || invoiceData[0].invoiceItems?.length === 0)) {
           
           console.log('Invoice data is missing details, fetching individual invoices...');
           
-          // Fetch complete data for each invoice
           const detailedInvoices = await Promise.all(
             invoiceData.map(async (invoice) => {
               try {
@@ -172,25 +168,23 @@ const Invoices = () => {
                   console.log(`Got detailed info for invoice #${invoice.invoiceNumber}`);
                   return detailResult.data;
                 }
-                return invoice; // Fallback to original if fetch fails
+                return invoice;
               } catch (err) {
                 console.error(`Error fetching details for invoice ${invoice.id}:`, err);
-                return invoice; // Return original invoice on error
+                return invoice;
               }
             })
           );
           
           console.log('Fetched detailed invoices:', detailedInvoices.length);
           
-          // Add customer name if missing but we have customer
           const enhancedInvoices = detailedInvoices.map(invoice => {
             if (!invoice.customerName && invoice.customer?.name) {
               invoice.customerName = invoice.customer.name;
             }
             
-            // If we have a customer ID but no customer name, add a placeholder
             if (!invoice.customerName && invoice.customerId) {
-              invoice.customerName = `Customer #${invoice.customerId}`;
+              invoice.customerName = t('customerPlaceholder', 'Customer #{{id}}', { id: invoice.customerId });
             }
             
             return invoice;
@@ -205,12 +199,12 @@ const Invoices = () => {
       } else {
         setInvoices([]);
         setError(result.message);
-        showSnackbar(result.message, 'error');
+        showSnackbar(t('fetchInvoicesError', 'Failed to fetch invoices'), 'error');
       }
     } catch (err) {
       setInvoices([]);
-      setError('Failed to fetch invoices');
-      showSnackbar('Failed to fetch invoices', 'error');
+      setError(t('fetchInvoicesError', 'Failed to fetch invoices'));
+      showSnackbar(t('fetchInvoicesError', 'Failed to fetch invoices'), 'error');
       console.error('Error fetching invoices:', err);
     } finally {
       setLoading(false);
@@ -453,33 +447,39 @@ const Invoices = () => {
   const handleEmailInvoice = () => {
     if (!selectedInvoice) return;
     
-    // Get customer email if available
     const customerEmail = selectedInvoice.customerEmail || '';
     
-    // Format the amount with a null check - check both total and totalAmount
     const formattedAmount = selectedInvoice.total 
       ? selectedInvoice.total.toFixed(2) 
       : (selectedInvoice.totalAmount 
           ? selectedInvoice.totalAmount.toFixed(2) 
           : '0.00');
     
-    // Get company name from context or localStorage or default
-    const companyName = companyInfo?.name || localStorage.getItem('company_name') || 'Our Company';
+    const companyName = companyInfo?.name || localStorage.getItem('company_name') || t('ourCompany', 'Our Company');
     
-    // Set default email data
     setEmailData({
       recipient: customerEmail,
-      subject: `Invoice #${selectedInvoice.invoiceNumber} from ${companyName}`,
-      body: `Dear ${selectedInvoice.customerName},
+      subject: t('invoiceEmailSubject', 'Invoice #{{number}} from {{company}}', {
+        number: selectedInvoice.invoiceNumber,
+        company: companyName
+      }),
+      body: t('invoiceEmailBody', `Dear {{customer}},
 
-Please find attached your invoice #${selectedInvoice.invoiceNumber} for the amount of ${formattedAmount} ${selectedInvoice.currency || 'USD'}.
+Please find attached your invoice #{{number}} for the amount of {{amount}} {{currency}}.
 
-Due date: ${new Date(selectedInvoice.dueDate).toLocaleDateString()}
+Due date: {{dueDate}}
 
 Thank you for your business.
 
 Best regards,
-${companyName}`
+{{company}}`, {
+        customer: selectedInvoice.customerName,
+        number: selectedInvoice.invoiceNumber,
+        amount: formattedAmount,
+        currency: selectedInvoice.currency || 'USD',
+        dueDate: new Date(selectedInvoice.dueDate).toLocaleDateString(),
+        company: companyName
+      })
     });
     
     setOpenEmailDialog(true);
@@ -492,15 +492,13 @@ ${companyName}`
     try {
       setSendingEmail(true);
       
-      // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(emailData.recipient)) {
-        showSnackbar('Please enter a valid email address', 'error');
+        showSnackbar(t('invalidEmail', 'Please enter a valid email address'), 'error');
         setSendingEmail(false);
         return;
       }
       
-      // Send the email
       const result = await messageService.sendInvoiceEmail(
         selectedInvoice.id,
         emailData.recipient,
@@ -509,19 +507,20 @@ ${companyName}`
       );
       
       if (result.success) {
-        showSnackbar('Invoice sent successfully via email', 'success');
+        showSnackbar(t('emailSentSuccess', 'Invoice sent successfully via email'), 'success');
         setOpenEmailDialog(false);
         
-        // Update invoice status to "Sent" if it was in Draft
         if (selectedInvoice.status === 0) {
           await handleUpdateStatus(selectedInvoice.id, 1);
         }
       } else {
-        showSnackbar(result.message || 'Failed to send invoice email', 'error');
+        showSnackbar(result.message || t('emailSendFailed', 'Failed to send invoice email'), 'error');
       }
     } catch (error) {
       console.error('Error sending invoice email:', error);
-      showSnackbar('Error sending invoice: ' + (error.message || 'Unknown error'), 'error');
+      showSnackbar(t('emailSendError', 'Error sending invoice: {{error}}', {
+        error: error.message || t('unknownError', 'Unknown error')
+      }), 'error');
     } finally {
       setSendingEmail(false);
     }
@@ -534,7 +533,7 @@ ${companyName}`
         <Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h4" component="h1" gutterBottom>
-              Invoice #{selectedInvoice.invoiceNumber}
+              {t('invoiceNumber', 'Invoice #{{number}}', { number: selectedInvoice.invoiceNumber })}
               {companyInfo?.name && (
                 <Typography variant="subtitle1" color="text.secondary">
                   {companyInfo.name}
@@ -548,7 +547,7 @@ ${companyName}`
                 onClick={() => handleGeneratePdf(selectedInvoice.id)}
                 sx={{ mr: 1 }}
               >
-                View PDF
+                {t('viewPdf', 'View PDF')}
               </Button>
               <Button 
                 variant="outlined" 
@@ -557,7 +556,7 @@ ${companyName}`
                 onClick={() => handleGeneratePdf(selectedInvoice.id, true)}
                 sx={{ mr: 1 }}
               >
-                Download PDF
+                {t('downloadPdf', 'Download PDF')}
               </Button>
               <Button 
                 variant="outlined" 
@@ -566,7 +565,7 @@ ${companyName}`
                 onClick={handleEmailInvoice}
                 sx={{ mr: 1 }}
               >
-                Email Invoice
+                {t('emailInvoice', 'Email Invoice')}
               </Button>
               {selectedInvoice.status === 1 && (
                 <Button 
@@ -576,14 +575,14 @@ ${companyName}`
                   onClick={() => handleUpdateStatus(selectedInvoice.id, 2)}
                   sx={{ mr: 1 }}
                 >
-                  Mark as Paid
+                  {t('markAsPaid', 'Mark as Paid')}
                 </Button>
               )}
               <Button 
                 variant="outlined" 
                 onClick={handleCloseDetails}
               >
-                Back to Invoices
+                {t('backToInvoices', 'Back to Invoices')}
               </Button>
             </Box>
           </Box>
@@ -591,23 +590,23 @@ ${companyName}`
           <Paper sx={{ mb: 3, p: 3 }}>
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
-                <Typography variant="h6" gutterBottom>Invoice Information</Typography>
+                <Typography variant="h6" gutterBottom>{t('invoiceInformation', 'Invoice Information')}</Typography>
                 {companyInfo?.name && (
                   <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2">From:</Typography>
+                    <Typography variant="subtitle2">{t('from', 'From')}:</Typography>
                     <Typography>{companyInfo.name}</Typography>
                   </Box>
                 )}
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">Customer:</Typography>
+                  <Typography variant="subtitle2">{t('customer', 'Customer')}:</Typography>
                   <Typography>{selectedInvoice.customerName}</Typography>
                 </Box>
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">Invoice Date:</Typography>
+                  <Typography variant="subtitle2">{t('invoiceDate', 'Invoice Date')}:</Typography>
                   <Typography>{new Date(selectedInvoice.invoiceDate).toLocaleDateString()}</Typography>
                 </Box>
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">Due Date:</Typography>
+                  <Typography variant="subtitle2">{t('dueDate', 'Due Date')}:</Typography>
                   <Typography 
                     sx={{ 
                       color: isOverdue(selectedInvoice) ? 'error.main' : 'inherit',
@@ -615,54 +614,52 @@ ${companyName}`
                     }}
                   >
                     {new Date(selectedInvoice.dueDate).toLocaleDateString()}
-                    {isOverdue(selectedInvoice) && ' (OVERDUE)'}
+                    {isOverdue(selectedInvoice) && ` (${t('overdue', 'OVERDUE')})`}
                   </Typography>
                 </Box>
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">Status:</Typography>
+                  <Typography variant="subtitle2">{t('status', 'Status')}:</Typography>
                   {getStatusChip(selectedInvoice.status)}
                 </Box>
               </Grid>
               <Grid item xs={12} md={6}>
-                <Typography variant="h6" gutterBottom>Payment Information</Typography>
+                <Typography variant="h6" gutterBottom>{t('paymentInformation', 'Payment Information')}</Typography>
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">Payment Method:</Typography>
-                  <Typography>{selectedInvoice.paymentMethod || 'Not specified'}</Typography>
+                  <Typography variant="subtitle2">{t('paymentMethod', 'Payment Method')}:</Typography>
+                  <Typography>{selectedInvoice.paymentMethod || t('notSpecified', 'Not specified')}</Typography>
                 </Box>
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">Payment Date:</Typography>
+                  <Typography variant="subtitle2">{t('paymentDate', 'Payment Date')}:</Typography>
                   <Typography>
                     {selectedInvoice.paymentDate 
                       ? new Date(selectedInvoice.paymentDate).toLocaleDateString() 
-                      : 'Not paid yet'}
+                      : t('notPaidYet', 'Not paid yet')}
                   </Typography>
                 </Box>
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">Reference Number:</Typography>
-                  <Typography>{selectedInvoice.referenceNumber || 'N/A'}</Typography>
+                  <Typography variant="subtitle2">{t('referenceNumber', 'Reference Number')}:</Typography>
+                  <Typography>{selectedInvoice.referenceNumber || t('na', 'N/A')}</Typography>
                 </Box>
               </Grid>
             </Grid>
           </Paper>
 
           <Paper sx={{ mb: 3 }}>
-            <Typography variant="h6" sx={{ p: 2 }}>Invoice Items</Typography>
+            <Typography variant="h6" sx={{ p: 2 }}>{t('invoiceItems', 'Invoice Items')}</Typography>
             <TableContainer>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Product</TableCell>
-                    <TableCell>Quantity</TableCell>
-                    <TableCell>Unit Price</TableCell>
-                    <TableCell>Tax Rate</TableCell>
-                    <TableCell>Tax Amount</TableCell>
-                    <TableCell align="right">Total</TableCell>
+                    <TableCell>{t('product', 'Product')}</TableCell>
+                    <TableCell>{t('quantity', 'Quantity')}</TableCell>
+                    <TableCell>{t('unitPrice', 'Unit Price')}</TableCell>
+                    <TableCell>{t('taxRate', 'Tax Rate')}</TableCell>
+                    <TableCell>{t('taxAmount', 'Tax Amount')}</TableCell>
+                    <TableCell align="right">{t('total', 'Total')}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {console.log('Rendering invoice items:', selectedInvoice?.invoiceItems)}
                   {(() => {
-                    // Handle .NET $values serialization
                     const items = selectedInvoice?.invoiceItems?.$values || selectedInvoice?.invoiceItems;
                     console.log('Processed items array:', items);
                     
@@ -680,25 +677,27 @@ ${companyName}`
                     } else {
                       return (
                         <TableRow>
-                          <TableCell colSpan={6} align="center">No items found</TableCell>
+                          <TableCell colSpan={6} align="center">{t('noItemsFound', 'No items found')}</TableCell>
                         </TableRow>
                       );
                     }
                   })()}
                   <TableRow>
-                    <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>Subtotal:</TableCell>
+                    <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>{t('subtotal', 'Subtotal')}:</TableCell>
                     <TableCell colSpan={2} align="right" sx={{ fontWeight: 'bold' }}>
                       {selectedInvoice?.subtotal?.toFixed(2) || '0.00'} {selectedInvoice?.currency || 'USD'}
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>Tax ({selectedInvoice?.taxRate || 0}%):</TableCell>
+                    <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>
+                      {t('taxWithRate', 'Tax ({{rate}}%)', { rate: selectedInvoice?.taxRate || 0 })}:
+                    </TableCell>
                     <TableCell colSpan={2} align="right" sx={{ fontWeight: 'bold' }}>
                       {selectedInvoice?.taxAmount?.toFixed(2) || '0.00'} {selectedInvoice?.currency || 'USD'}
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>Total:</TableCell>
+                    <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>{t('total', 'Total')}:</TableCell>
                     <TableCell colSpan={2} align="right" sx={{ fontWeight: 'bold' }}>
                       {selectedInvoice?.total?.toFixed(2) || '0.00'} {selectedInvoice?.currency || 'USD'}
                     </TableCell>
@@ -710,7 +709,7 @@ ${companyName}`
 
           {selectedInvoice.notes && (
             <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>Notes</Typography>
+              <Typography variant="h6" gutterBottom>{t('notes', 'Notes')}</Typography>
               <Typography>{selectedInvoice.notes}</Typography>
             </Paper>
           )}
@@ -721,7 +720,7 @@ ${companyName}`
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Box>
               <Typography variant="h4" component="h1" gutterBottom>
-                Invoices Management
+                {t('invoicesManagement', 'Invoices Management')}
               </Typography>
               {companyInfo?.name && (
                 <Typography variant="subtitle1" color="text.secondary">
@@ -729,14 +728,13 @@ ${companyName}`
                 </Typography>
               )}
             </Box>
-            
           </Box>
 
           <Paper sx={{ mb: 3, p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <TextField
                 variant="outlined"
-                placeholder="Search invoices..."
+                placeholder={t('searchInvoices', 'Search invoices...')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 size="small"
@@ -749,7 +747,7 @@ ${companyName}`
                   ),
                 }}
               />
-              <Tooltip title="Refresh">
+              <Tooltip title={t('refresh', 'Refresh')}>
                 <IconButton onClick={fetchInvoices}>
                   <RefreshIcon />
                 </IconButton>
@@ -767,13 +765,13 @@ ${companyName}`
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Invoice #</TableCell>
-                  <TableCell>Customer</TableCell>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Due Date</TableCell>
-                  <TableCell>Total</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+                  <TableCell>{t('invoiceNumber', 'Invoice #')}</TableCell>
+                  <TableCell>{t('customer', 'Customer')}</TableCell>
+                  <TableCell>{t('date', 'Date')}</TableCell>
+                  <TableCell>{t('dueDate', 'Due Date')}</TableCell>
+                  <TableCell>{t('total', 'Total')}</TableCell>
+                  <TableCell>{t('status', 'Status')}</TableCell>
+                  <TableCell align="right">{t('actions', 'Actions')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -786,7 +784,7 @@ ${companyName}`
                 ) : filteredInvoices.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} align="center">
-                      No invoices found
+                      {t('noInvoicesFound', 'No invoices found')}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -808,14 +806,14 @@ ${companyName}`
                           }}
                         >
                           <TableCell>{invoice.invoiceNumber}</TableCell>
-                          <TableCell>{invoice.customerName || 'Unknown Customer'}</TableCell>
+                          <TableCell>{invoice.customerName || t('unknownCustomer', 'Unknown Customer')}</TableCell>
                           <TableCell>{new Date(invoice.invoiceDate).toLocaleDateString()}</TableCell>
                           <TableCell>
                             <Box sx={{ display: 'flex', alignItems: 'center' }}>
                               {new Date(invoice.dueDate).toLocaleDateString()}
                               {isInvoiceOverdue && (
                                 <Chip 
-                                  label="OVERDUE" 
+                                  label={t('overdue', 'OVERDUE')} 
                                   color="error" 
                                   size="small" 
                                   sx={{ ml: 1 }}
@@ -826,7 +824,7 @@ ${companyName}`
                           <TableCell>{invoice.total?.toFixed(2) || '0.00'} {invoice.currency || 'USD'}</TableCell>
                           <TableCell>{getStatusChip(invoice.status)}</TableCell>
                           <TableCell align="right">
-                            <Tooltip title="Generate PDF">
+                            <Tooltip title={t('generatePdf', 'Generate PDF')}>
                               <IconButton 
                                 size="small" 
                                 onClick={(e) => {
@@ -839,7 +837,7 @@ ${companyName}`
                               </IconButton>
                             </Tooltip>
                             {invoice.status === 1 && (
-                              <Tooltip title="Mark as Paid">
+                              <Tooltip title={t('markAsPaid', 'Mark as Paid')}>
                                 <IconButton 
                                   size="small" 
                                   onClick={(e) => {
@@ -852,7 +850,7 @@ ${companyName}`
                                 </IconButton>
                               </Tooltip>
                             )}
-                            <Tooltip title="Delete">
+                            <Tooltip title={t('delete', 'Delete')}>
                               <IconButton 
                                 size="small" 
                                 onClick={(e) => {
@@ -879,6 +877,10 @@ ${companyName}`
               page={page}
               onPageChange={handleChangePage}
               onRowsPerPageChange={handleChangeRowsPerPage}
+              labelRowsPerPage={t('rowsPerPage', 'Rows per page:')}
+              labelDisplayedRows={({ from, to, count }) => 
+                t('paginationDisplayedRows', '{{from}}-{{to}} of {{count}}', { from, to, count })
+              }
             />
           </TableContainer>
         </>
@@ -886,17 +888,18 @@ ${companyName}`
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
-        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogTitle>{t('confirmDelete', 'Confirm Delete')}</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete invoice #{invoiceToDelete?.invoiceNumber}?
-            This action cannot be undone.
+            {t('deleteInvoiceConfirm', 'Are you sure you want to delete invoice #{{number}}? This action cannot be undone.', {
+              number: invoiceToDelete?.invoiceNumber
+            })}
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDeleteDialog(false)}>Cancel</Button>
+          <Button onClick={() => setOpenDeleteDialog(false)}>{t('cancel', 'Cancel')}</Button>
           <Button onClick={handleDeleteConfirm} color="error" variant="contained">
-            Delete
+            {t('delete', 'Delete')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -915,24 +918,24 @@ ${companyName}`
       
       {/* Email Invoice Dialog */}
       <Dialog open={openEmailDialog} onClose={() => !sendingEmail && setOpenEmailDialog(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Email Invoice</DialogTitle>
+        <DialogTitle>{t('emailInvoice', 'Email Invoice')}</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="Recipient Email"
+                label={t('recipientEmail', 'Recipient Email')}
                 name="recipient"
                 value={emailData.recipient}
                 onChange={(e) => setEmailData({...emailData, recipient: e.target.value})}
                 required
                 disabled={sendingEmail}
-                helperText="Enter the email address to send the invoice to"
+                helperText={t('enterEmailHelp', 'Enter the email address to send the invoice to')}
                 sx={{ mb: 2 }}
               />
               <TextField
                 fullWidth
-                label="Subject"
+                label={t('subject', 'Subject')}
                 name="subject"
                 value={emailData.subject}
                 onChange={(e) => setEmailData({...emailData, subject: e.target.value})}
@@ -941,7 +944,7 @@ ${companyName}`
               />
               <TextField
                 fullWidth
-                label="Message"
+                label={t('message', 'Message')}
                 name="body"
                 value={emailData.body}
                 onChange={(e) => setEmailData({...emailData, body: e.target.value})}
@@ -957,7 +960,7 @@ ${companyName}`
             onClick={() => setOpenEmailDialog(false)} 
             disabled={sendingEmail}
           >
-            Cancel
+            {t('cancel', 'Cancel')}
           </Button>
           <Button 
             onClick={handleSendEmail} 
@@ -966,7 +969,7 @@ ${companyName}`
             disabled={!emailData.recipient || !emailData.subject || !emailData.body || sendingEmail}
             startIcon={sendingEmail ? <CircularProgress size={20} /> : <EmailIcon />}
           >
-            {sendingEmail ? 'Sending...' : 'Send Invoice'}
+            {sendingEmail ? t('sending', 'Sending...') : t('sendInvoice', 'Send Invoice')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { 
   Box, 
   Button, 
@@ -15,6 +16,7 @@ import DashboardPlaceholder from '../components/DashboardPlaceholder';
 
 const LandingPage = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const handleGetStarted = () => {
     navigate('/login');
@@ -34,10 +36,10 @@ const LandingPage = () => {
           <Grid container spacing={4} alignItems="center">
             <Grid item xs={12} md={6}>
               <Typography variant="h2" component="h1" fontWeight="bold" gutterBottom>
-                Welcome to TrackMate
+                {t('landing.welcome')}
               </Typography>
               <Typography variant="h5" paragraph>
-                Your all-in-one business tracking and management solution
+                {t('landing.subtitle')}
               </Typography>
               <Button 
                 variant="contained" 
@@ -53,7 +55,7 @@ const LandingPage = () => {
                 }}
                 endIcon={<ArrowForward />}
               >
-                Get Started
+                {t('landing.getStarted')}
               </Button>
             </Grid>
             <Grid item xs={12} md={6}>
@@ -66,7 +68,7 @@ const LandingPage = () => {
       {/* Features Section */}
       <Container maxWidth="lg" sx={{ py: 8 }}>
         <Typography variant="h3" component="h2" align="center" gutterBottom>
-          Our Features
+          {t('landing.features')}
         </Typography>
         <Grid container spacing={4} mt={4}>
           <Grid item xs={12} sm={6} md={3}>
@@ -76,10 +78,10 @@ const LandingPage = () => {
               </Box>
               <CardContent>
                 <Typography variant="h6" component="h3" gutterBottom>
-                  Comprehensive Analytics
+                  {t('landing.features.analytics.title')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Gain actionable insights through our advanced analytics dashboard
+                  {t('landing.features.analytics.description')}
                 </Typography>
               </CardContent>
             </Card>
@@ -91,10 +93,10 @@ const LandingPage = () => {
               </Box>
               <CardContent>
                 <Typography variant="h6" component="h3" gutterBottom>
-                  Secure Platform
+                  {t('landing.features.security.title')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Your data is protected with enterprise-grade security measures
+                  {t('landing.features.security.description')}
                 </Typography>
               </CardContent>
             </Card>
@@ -106,10 +108,10 @@ const LandingPage = () => {
               </Box>
               <CardContent>
                 <Typography variant="h6" component="h3" gutterBottom>
-                  Real-time Tracking
+                  {t('landing.features.tracking.title')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Monitor your business performance in real-time with live updates
+                  {t('landing.features.tracking.description')}
                 </Typography>
               </CardContent>
             </Card>
@@ -121,10 +123,10 @@ const LandingPage = () => {
               </Box>
               <CardContent>
                 <Typography variant="h6" component="h3" gutterBottom>
-                  Team Collaboration
+                  {t('landing.features.collaboration.title')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Enable seamless collaboration among your team members
+                  {t('landing.features.collaboration.description')}
                 </Typography>
               </CardContent>
             </Card>
@@ -137,10 +139,10 @@ const LandingPage = () => {
         <Container maxWidth="md">
           <Stack spacing={3} alignItems="center" textAlign="center">
             <Typography variant="h3" component="h2">
-              Ready to Transform Your Business?
+              {t('landing.cta.title')}
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 600 }}>
-              Join thousands of businesses already using TrackMate to streamline operations, boost productivity, and drive growth.
+              {t('landing.cta.description')}
             </Typography>
             <Button 
               variant="contained" 
@@ -148,7 +150,7 @@ const LandingPage = () => {
               onClick={handleGetStarted}
               endIcon={<ArrowForward />}
             >
-              Start Now
+              {t('landing.cta.button')}
             </Button>
           </Stack>
         </Container>
@@ -163,7 +165,7 @@ const LandingPage = () => {
                 TrackMate
               </Typography>
               <Typography variant="body2" sx={{ mt: 1 }}>
-                © {new Date().getFullYear()} TrackMate. All rights reserved.
+                © {new Date().getFullYear()} TrackMate. {t('landing.footer.rights')}
               </Typography>
             </Grid>
             <Grid item xs={12} md={6} sx={{ display: 'flex', justifyContent: { xs: 'flex-start', md: 'flex-end' } }}>
@@ -191,7 +193,7 @@ const LandingPage = () => {
     style={{ textDecoration: 'none', color: 'inherit' }}
   >
     <Button color="inherit" size="small">
-      Mail
+      {t('landing.footer.email')}
     </Button>
   </a>
 

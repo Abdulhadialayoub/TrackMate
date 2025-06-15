@@ -28,6 +28,7 @@ import { aiService } from '../services/aiService';
 import { orderService } from '../services/orderService';
 import { useNavigate } from 'react-router-dom';
 import { ORDER_STATUS, ORDER_STATUS_NAMES, getStatusName, getStatusColor } from '../utils/orderUtils';
+import { useTranslation } from 'react-i18next';
 
 const OrdersAIAnalysis = () => {
   const [loading, setLoading] = useState(false);
@@ -38,11 +39,12 @@ const OrdersAIAnalysis = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   // Map status values to objects with label and color for UI
   const orderStatuses = Object.entries(ORDER_STATUS_NAMES).map(([value, label]) => ({
     value: parseInt(value),
-    label,
+    label: t(`orders.statuses.${label.toLowerCase()}`),
     color: getStatusColor(parseInt(value)),
     stringValue: label
   }));
@@ -60,7 +62,7 @@ const OrdersAIAnalysis = () => {
       console.log('Fetching orders for company ID:', companyId);
       
       if (!companyId) {
-        throw new Error('No company ID found');
+        throw new Error(t('orders.bulkAnalysis.error.noCompanyId'));
       }
       
       const result = await orderService.getByCompanyId(companyId);
@@ -69,11 +71,11 @@ const OrdersAIAnalysis = () => {
         console.log(`Fetched ${result.data.length} orders successfully`);
         setOrders(result.data);
       } else {
-        setError('Failed to fetch orders: ' + result.message);
+        setError(t('orders.bulkAnalysis.error.failedToFetch', { message: result.message }));
       }
     } catch (err) {
       console.error('Error fetching orders:', err);
-      setError('Error fetching orders: ' + err.message);
+      setError(t('orders.bulkAnalysis.error.failedToFetch', { message: err.message }));
     } finally {
       setOrdersLoading(false);
     }
@@ -81,7 +83,7 @@ const OrdersAIAnalysis = () => {
 
   const handleAnalyzeAllOrders = async () => {
     if (!orders || orders.length === 0) {
-      setError('No orders available to analyze');
+      setError(t('orders.bulkAnalysis.error.noOrders'));
       return;
     }
     
@@ -93,7 +95,7 @@ const OrdersAIAnalysis = () => {
       const ordersToAnalyze = filterOrders();
       
       if (ordersToAnalyze.length === 0) {
-        setError('No orders match your filters for analysis');
+        setError(t('orders.bulkAnalysis.error.noMatchingOrders'));
         setLoading(false);
         return;
       }
@@ -106,11 +108,11 @@ const OrdersAIAnalysis = () => {
       if (result.success) {
         setAnalysis(result.data.comment);
       } else {
-        setError(result.message || 'Failed to analyze orders');
+        setError(result.message || t('orders.aiAnalysis.error.failedToAnalyze'));
       }
     } catch (err) {
       console.error('Error in AI analysis:', err);
-      setError('An unexpected error occurred during analysis');
+      setError(t('orders.aiAnalysis.error.unexpectedError'));
     } finally {
       setLoading(false);
     }
@@ -163,10 +165,10 @@ const OrdersAIAnalysis = () => {
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <Typography variant="h4" component="h1">
-              Bulk AI Order Analysis
+              {t('orders.aiAnalysis.bulkTitle')}
             </Typography>
             <Typography variant="subtitle1" color="text.secondary">
-              Analyze trends and patterns across all your orders
+              {t('orders.aiAnalysis.subtitle')}
             </Typography>
           </div>
           <Button 
@@ -174,7 +176,7 @@ const OrdersAIAnalysis = () => {
             startIcon={<ArrowBackIcon />} 
             onClick={handleBackToOrders}
           >
-            Back to Orders
+            {t('orders.bulkAnalysis.backToOrders')}
           </Button>
         </Box>
         
@@ -183,14 +185,14 @@ const OrdersAIAnalysis = () => {
         {/* Filters */}
         <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
           <Typography variant="subtitle2" gutterBottom>
-            Filter Orders for Analysis
+            {t('orders.bulkAnalysis.filterTitle')}
           </Typography>
           <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} md={5}>
               <TextField
                 fullWidth
                 size="small"
-                placeholder="Search by order number or customer..."
+                placeholder={t('orders.bulkAnalysis.searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 InputProps={{
@@ -204,14 +206,14 @@ const OrdersAIAnalysis = () => {
             </Grid>
             <Grid item xs={12} md={5}>
               <FormControl fullWidth size="small">
-                <InputLabel id="status-filter-label">Status</InputLabel>
+                <InputLabel id="status-filter-label">{t('orders.filter.filterByStatus')}</InputLabel>
                 <Select
                   labelId="status-filter-label"
                   value={statusFilter}
-                  label="Status"
+                  label={t('orders.filter.filterByStatus')}
                   onChange={(e) => setStatusFilter(e.target.value)}
                 >
-                  <MenuItem value="all">All Statuses</MenuItem>
+                  <MenuItem value="all">{t('orders.filter.allStatuses')}</MenuItem>
                   {orderStatuses.map((status) => (
                     <MenuItem key={status.value} value={status.value.toString()}>
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -234,7 +236,7 @@ const OrdersAIAnalysis = () => {
             <Grid item xs={12} md={2}>
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 <Typography variant="body2" sx={{ mr: 1 }}>
-                  Orders selected:
+                  {t('orders.bulkAnalysis.ordersSelected')}
                 </Typography>
                 <Chip 
                   label={ordersLoading ? "..." : getFilteredOrdersCount()} 
@@ -258,18 +260,18 @@ const OrdersAIAnalysis = () => {
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
             <CircularProgress />
             <Typography variant="body1" sx={{ ml: 2 }}>
-              Loading orders...
+              {t('orders.bulkAnalysis.loadingOrders')}
             </Typography>
           </Box>
         ) : orders.length === 0 ? (
           <Alert severity="info" sx={{ mb: 3 }}>
-            No orders available for analysis. Please create some orders first.
+            {t('orders.bulkAnalysis.noOrdersAvailable')}
           </Alert>
         ) : (
           !analysis && (
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
               <Typography variant="body1" gutterBottom sx={{ maxWidth: 600, textAlign: 'center', mb: 3 }}>
-                Click the button below to analyze {getFilteredOrdersCount()} orders. Our AI will identify patterns, trends, and provide business recommendations based on your order data.
+                {t('orders.bulkAnalysis.startAnalysisDescription', { count: getFilteredOrdersCount() })}
               </Typography>
               <Button
                 variant="contained"
@@ -279,7 +281,7 @@ const OrdersAIAnalysis = () => {
                 onClick={handleAnalyzeAllOrders}
                 disabled={loading || getFilteredOrdersCount() === 0}
               >
-                {loading ? 'Analyzing...' : `Analyze ${getFilteredOrdersCount()} Orders`}
+                {loading ? t('orders.aiAnalysis.analyzingButton') : t('orders.bulkAnalysis.analyzeButton', { count: getFilteredOrdersCount() })}
               </Button>
             </Box>
           )
@@ -289,12 +291,12 @@ const OrdersAIAnalysis = () => {
         {analysis && (
           <Box>
             <Typography variant="h6" gutterBottom>
-              Analysis Results
+              {t('orders.bulkAnalysis.resultsTitle')}
             </Typography>
             <Card variant="outlined" sx={{ mb: 2, backgroundColor: 'rgba(200, 250, 205, 0.2)' }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom sx={{ color: 'primary.dark' }}>
-                  Business Intelligence & Recommendations
+                  {t('orders.bulkAnalysis.recommendationsTitle')}
                 </Typography>
                 <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
                   {analysis}
@@ -307,7 +309,7 @@ const OrdersAIAnalysis = () => {
                 onClick={() => setAnalysis(null)}
                 sx={{ mr: 2 }}
               >
-                Reset Analysis
+                {t('orders.bulkAnalysis.resetButton')}
               </Button>
               <Button
                 variant="contained"
@@ -316,7 +318,7 @@ const OrdersAIAnalysis = () => {
                 onClick={handleAnalyzeAllOrders}
                 disabled={loading}
               >
-                Run New Analysis
+                {t('orders.bulkAnalysis.newAnalysisButton')}
               </Button>
             </Box>
           </Box>

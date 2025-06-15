@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { 
   Box, 
   Typography, 
@@ -55,6 +56,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
+  const { t } = useTranslation();
   const [userProfile, setUserProfile] = useState(null);
   const [companyName, setCompanyName] = useState('');
   const [companyId, setCompanyId] = useState(null);
@@ -325,25 +327,25 @@ const Dashboard = () => {
     
     return [
       { 
-        title: 'Company Users', 
+        title: t('dashboard.companyUsers'), 
         value: dashboardStats.userCount.toString(), 
         color: theme.palette.primary.main,
         icon: <PeopleIcon sx={{ fontSize: 40, color: theme.palette.primary.main }} />
       },
       { 
-        title: 'Active Orders', 
+        title: t('dashboard.activeOrders'), 
         value: dashboardStats.orderCount.toString(), 
         color: theme.palette.secondary.main,
         icon: <OrdersIcon sx={{ fontSize: 40, color: theme.palette.secondary.main }} />
       },
       { 
-        title: 'Company Revenue', 
+        title: t('dashboard.companyRevenue'), 
         value: formatCurrency(dashboardStats.revenue), 
         color: theme.palette.success.main,
         icon: <AttachMoneyIcon sx={{ fontSize: 40, color: theme.palette.success.main }} />
       },
       { 
-        title: 'Company Products', 
+        title: t('dashboard.companyProducts'), 
         value: dashboardStats.productCount.toString(), 
         color: theme.palette.warning.main,
         icon: <InventoryIcon sx={{ fontSize: 40, color: theme.palette.warning.main }} />
@@ -382,16 +384,18 @@ const Dashboard = () => {
             <Box>
               <Typography variant="h4" fontWeight="bold" color="primary">
                 {userProfile?.role === 'Dev' 
-                  ? `System Dashboard`
+                  ? t('dashboard.systemDashboard')
                   : userProfile?.role === 'Admin' 
-                  ? `${companyName || 'Company'} Dashboard`
-                  : `Welcome Back`}
+                  ? t('dashboard.companyDashboard', { company: companyName || 'Company' })
+                  : t('dashboard.welcomeBack')}
               </Typography>
               <Typography variant="h6" color="text.secondary" sx={{ mt: 1 }}>
-                {userProfile?.name ? `Hello, ${userProfile.name}` : ''}
+                {userProfile?.name ? t('dashboard.greeting', { name: userProfile.name }) : ''}
               </Typography>
               <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-                {companyName ? `Here's what's happening with ${companyName} today.` : "Here's what's happening with your company today."}
+                {companyName 
+                  ? t('dashboard.companyStatus', { company: companyName })
+                  : t('dashboard.companyStatusDefault')}
               </Typography>
             </Box>
             <Button
@@ -406,7 +410,7 @@ const Dashboard = () => {
                 borderRadius: 2
               }}
             >
-              Refresh Data
+              {t('common.refreshData')}
             </Button>
           </Box>
             
@@ -501,14 +505,14 @@ const Dashboard = () => {
                       justifyContent: 'space-between', 
                       alignItems: 'center'
                     }}>
-                      <Typography variant="h6" fontWeight="bold">Recent Orders</Typography>
+                      <Typography variant="h6" fontWeight="bold">{t('dashboard.recentOrders')}</Typography>
                       <Box sx={{ visibility: loading ? 'hidden' : 'visible' }}>
                         <Button
                           endIcon={<ArrowForwardIcon />}
                           onClick={() => navigate('/orders')}
                           sx={{ p: 0 }}
                         >
-                          View All
+                          {t('dashboard.viewAll')}
                         </Button>
                       </Box>
                     </Box>
@@ -519,7 +523,7 @@ const Dashboard = () => {
                       </Box>
                     ) : !recentOrders || !Array.isArray(recentOrders) || recentOrders.length === 0 ? (
                       <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 6 }}>
-                        No recent orders found
+                        {t('dashboard.noRecentOrders')}
                       </Typography>
                     ) : (
                       <List sx={{ p: 0 }}>
@@ -551,7 +555,7 @@ const Dashboard = () => {
                                 secondary={
                                   <Typography variant="body2" color="text.secondary">
                                     {order.customerName || order.customer?.name || 
-                                    (order.customerId ? `Customer #${order.customerId}` : 'Unknown Customer')}
+                                    (order.customerId ? t('dashboard.customerNumber', { id: order.customerId }) : t('dashboard.unknownCustomer'))}
                                   </Typography>
                                 }
                               />
@@ -606,7 +610,7 @@ const Dashboard = () => {
                       p: 3, 
                       borderBottom: '1px solid rgba(0,0,0,0.05)'
                     }}>
-                      <Typography variant="h6" fontWeight="bold">Quick Actions</Typography>
+                      <Typography variant="h6" fontWeight="bold">{t('dashboard.quickActions')}</Typography>
                     </Box>
                     
                     <Box sx={{ p: 3 }}>
@@ -622,7 +626,7 @@ const Dashboard = () => {
                         }}
                         onClick={() => navigate('/products')}
                       >
-                        Add New Product
+                        {t('dashboard.addNewProduct')}
                       </Button>
                       
                       <Button
@@ -632,7 +636,7 @@ const Dashboard = () => {
                         sx={{ mb: 2.5, py: 1.5, borderRadius: 2 }}
                         onClick={() => navigate('/customers')}
                       >
-                        Add New Customer
+                        {t('dashboard.addNewCustomer')}
                       </Button>
                       
                       <Button
@@ -642,7 +646,7 @@ const Dashboard = () => {
                         sx={{ py: 1.5, borderRadius: 2 }}
                         onClick={() => navigate('/orders')}
                       >
-                        Create New Order
+                        {t('dashboard.createNewOrder')}
                       </Button>
                     </Box>
                   </CardContent>

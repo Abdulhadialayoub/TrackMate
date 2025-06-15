@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   Box, 
   Button, 
@@ -57,29 +58,29 @@ const initialFormState = {
   companyId: parseInt(localStorage.getItem('company_id') || '1')
 };
 
-const customerStatuses = [
-  { value: 0, label: 'Active', color: 'success' },
-  { value: 1, label: 'Inactive', color: 'error' },
-  { value: 2, label: 'Blocked', color: 'error' },
-  { value: 3, label: 'Deleted', color: 'warning' }
+const getCustomerStatuses = (t) => [
+  { value: 0, label: t('customerStatus.active'), color: 'success' },
+  { value: 1, label: t('customerStatus.inactive'), color: 'error' },
+  { value: 2, label: t('customerStatus.blocked'), color: 'error' },
+  { value: 3, label: t('customerStatus.deleted'), color: 'warning' }
 ];
 
-const invoiceStatuses = [
-  { value: 0, label: 'Draft', color: 'default' },
-  { value: 1, label: 'Sent', color: 'info' },
-  { value: 2, label: 'Paid', color: 'success' },
-  { value: 3, label: 'Overdue', color: 'error' },
-  { value: 4, label: 'Cancelled', color: 'warning' }
+const getInvoiceStatuses = (t) => [
+  { value: 0, label: t('invoiceStatus.draft'), color: 'default' },
+  { value: 1, label: t('invoiceStatus.sent'), color: 'info' },
+  { value: 2, label: t('invoiceStatus.paid'), color: 'success' },
+  { value: 3, label: t('invoiceStatus.overdue'), color: 'error' },
+  { value: 4, label: t('invoiceStatus.cancelled'), color: 'warning' }
 ];
 
-const orderStatuses = [
-  { value: 0, label: 'Draft', color: 'default' },
-  { value: 1, label: 'Pending', color: 'warning' },
-  { value: 2, label: 'Confirmed', color: 'info' },
-  { value: 3, label: 'Shipped', color: 'primary' },
-  { value: 4, label: 'Delivered', color: 'success' },
-  { value: 5, label: 'Cancelled', color: 'error' },
-  { value: 6, label: 'Completed', color: 'secondary' }
+const getOrderStatuses = (t) => [
+  { value: 0, label: t('orderStatus.draft'), color: 'default' },
+  { value: 1, label: t('orderStatus.pending'), color: 'warning' },
+  { value: 2, label: t('orderStatus.confirmed'), color: 'info' },
+  { value: 3, label: t('orderStatus.shipped'), color: 'primary' },
+  { value: 4, label: t('orderStatus.delivered'), color: 'success' },
+  { value: 5, label: t('orderStatus.cancelled'), color: 'error' },
+  { value: 6, label: t('orderStatus.completed'), color: 'secondary' }
 ];
 
 function TabPanel(props) {
@@ -104,6 +105,7 @@ function TabPanel(props) {
 
 const Customers = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -121,6 +123,10 @@ const Customers = () => {
   const [customerOrders, setCustomerOrders] = useState([]);
   const [customerInvoices, setCustomerInvoices] = useState([]);
   const [detailsLoading, setDetailsLoading] = useState(false);
+
+  const customerStatuses = getCustomerStatuses(t);
+  const orderStatuses = getOrderStatuses(t);
+  const invoiceStatuses = getInvoiceStatuses(t);
 
   useEffect(() => {
     const checkAuthAndFetch = async () => {
@@ -431,44 +437,44 @@ const Customers = () => {
         <Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h4" component="h1" gutterBottom>
-              {selectedCustomer.name || `Customer #${selectedCustomer.id}` || 'Customer Details'}
+              {selectedCustomer.name || t('customers.customerNumber', { id: selectedCustomer.id }) || t('customers.details')}
             </Typography>
             <Button 
               variant="outlined" 
               onClick={handleCloseDetails}
             >
-              Back to Customers
+              {t('customers.backToList')}
             </Button>
           </Box>
 
           <Paper sx={{ mb: 3 }}>
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
               <Tabs value={tabValue} onChange={handleTabChange} aria-label="customer details tabs">
-                <Tab label="Customer Info" />
-                <Tab label="Orders" />
-                <Tab label="Invoices" />
+                <Tab label={t('customers.tabs.info')} />
+                <Tab label={t('customers.tabs.orders')} />
+                <Tab label={t('customers.tabs.invoices')} />
               </Tabs>
             </Box>
 
             <TabPanel value={tabValue} index={0}>
               <Grid container spacing={3}>
                 <Grid item xs={12} md={6}>
-                  <Typography variant="h6" gutterBottom>Contact Information</Typography>
+                  <Typography variant="h6" gutterBottom>{t('customers.details.contactInfo')}</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                     <EmailIcon sx={{ mr: 1, color: 'primary.main' }} />
-                    <Typography>{selectedCustomer.email || 'N/A'}</Typography>
+                    <Typography>{selectedCustomer.email || t('common.na')}</Typography>
                   </Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                     <PhoneIcon sx={{ mr: 1, color: 'primary.main' }} />
-                    <Typography>{selectedCustomer.phone || 'N/A'}</Typography>
+                    <Typography>{selectedCustomer.phone || t('common.na')}</Typography>
                   </Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <Typography variant="subtitle2" sx={{ mr: 1 }}>Status:</Typography>
+                    <Typography variant="subtitle2" sx={{ mr: 1 }}>{t('customers.details.status')}:</Typography>
                     {getStatusChip(selectedCustomer.status)}
                   </Box>
                 </Grid>
                 <Grid item xs={12} md={6}>
-                  <Typography variant="h6" gutterBottom>Address</Typography>
+                  <Typography variant="h6" gutterBottom>{t('customers.details.address')}</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
                     <LocationIcon sx={{ mr: 1, mt: 0.5, color: 'primary.main' }} />
                     <Typography>
@@ -477,18 +483,18 @@ const Customers = () => {
                   </Box>
                 </Grid>
                 <Grid item xs={12}>
-                  <Typography variant="h6" gutterBottom>Additional Information</Typography>
+                  <Typography variant="h6" gutterBottom>{t('customers.details.additionalInfo')}</Typography>
                   <Box sx={{ mb: 1 }}>
-                    <Typography variant="subtitle2">Tax Number:</Typography>
-                    <Typography>{selectedCustomer.taxNumber || 'N/A'}</Typography>
+                    <Typography variant="subtitle2">{t('customers.details.taxNumber')}:</Typography>
+                    <Typography>{selectedCustomer.taxNumber || t('common.na')}</Typography>
                   </Box>
                   <Box sx={{ mb: 1 }}>
-                    <Typography variant="subtitle2">Tax Office:</Typography>
-                    <Typography>{selectedCustomer.taxOffice || 'N/A'}</Typography>
+                    <Typography variant="subtitle2">{t('customers.details.taxOffice')}:</Typography>
+                    <Typography>{selectedCustomer.taxOffice || t('common.na')}</Typography>
                   </Box>
                   <Box sx={{ mb: 1 }}>
-                    <Typography variant="subtitle2">Notes:</Typography>
-                    <Typography>{selectedCustomer.notes || 'No notes available'}</Typography>
+                    <Typography variant="subtitle2">{t('customers.details.notes')}:</Typography>
+                    <Typography>{selectedCustomer.notes || t('customers.details.noNotes')}</Typography>
                   </Box>
                 </Grid>
               </Grid>
@@ -500,16 +506,16 @@ const Customers = () => {
                   <CircularProgress />
                 </Box>
               ) : customerOrders.length === 0 ? (
-                <Typography>No orders found for this customer.</Typography>
+                <Typography>{t('customers.noOrdersFound')}</Typography>
               ) : (
                 <TableContainer>
                   <Table>
                     <TableHead>
                       <TableRow key="orders-header-row">
-                        <TableCell>Order #</TableCell>
-                        <TableCell>Date</TableCell>
-                        <TableCell>Total</TableCell>
-                        <TableCell>Status</TableCell>
+                        <TableCell>{t('orders.table.orderNumber')}</TableCell>
+                        <TableCell>{t('orders.table.date')}</TableCell>
+                        <TableCell>{t('orders.table.total')}</TableCell>
+                        <TableCell>{t('orders.table.status')}</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -555,17 +561,17 @@ const Customers = () => {
                   <CircularProgress />
                 </Box>
               ) : customerInvoices.length === 0 ? (
-                <Typography>No invoices found for this customer.</Typography>
+                <Typography>{t('customers.noInvoicesFound')}</Typography>
               ) : (
                 <TableContainer>
                   <Table>
                     <TableHead>
                       <TableRow key="invoices-header-row">
-                        <TableCell>Invoice #</TableCell>
-                        <TableCell>Date</TableCell>
-                        <TableCell>Due Date</TableCell>
-                        <TableCell>Total</TableCell>
-                        <TableCell>Status</TableCell>
+                        <TableCell>{t('invoices.table.invoiceNumber')}</TableCell>
+                        <TableCell>{t('invoices.table.date')}</TableCell>
+                        <TableCell>{t('invoices.table.dueDate')}</TableCell>
+                        <TableCell>{t('invoices.table.total')}</TableCell>
+                        <TableCell>{t('invoices.table.status')}</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -600,24 +606,24 @@ const Customers = () => {
         // Customers list view
         <>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h4" component="h1" gutterBottom>
-              Customers Management
-            </Typography>
-            <Button 
-              variant="contained" 
-              color="primary" 
-              startIcon={<AddIcon />}
-              onClick={() => handleOpenDialog()}
-            >
-              Add Customer
-            </Button>
+                      <Typography variant="h4" component="h1" gutterBottom>
+            {t('customers.management')}
+          </Typography>
+          <Button 
+            variant="contained" 
+            color="primary" 
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDialog()}
+          >
+            {t('customers.addCustomer')}
+          </Button>
           </Box>
 
           <Paper sx={{ mb: 3, p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <TextField
                 variant="outlined"
-                placeholder="Search customers..."
+                placeholder={t('customers.searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 size="small"
@@ -630,7 +636,7 @@ const Customers = () => {
                   ),
                 }}
               />
-              <Tooltip title="Refresh">
+              <Tooltip title={t('common.refresh')}>
                 <IconButton onClick={fetchCustomers}>
                   <RefreshIcon />
                 </IconButton>
@@ -648,12 +654,12 @@ const Customers = () => {
             <Table>
               <TableHead>
                 <TableRow key="customers-header-row">
-                  <TableCell>Name</TableCell>
-                  <TableCell>Email</TableCell>
-                  <TableCell>Phone</TableCell>
-                  <TableCell>Tax Number</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+                  <TableCell>{t('customers.table.name')}</TableCell>
+                  <TableCell>{t('customers.table.email')}</TableCell>
+                  <TableCell>{t('customers.table.phone')}</TableCell>
+                  <TableCell>{t('customers.table.taxNumber')}</TableCell>
+                  <TableCell>{t('customers.table.status')}</TableCell>
+                  <TableCell align="right">{t('common.actions')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -666,7 +672,7 @@ const Customers = () => {
                 ) : filteredCustomers.length === 0 ? (
                   <TableRow key="no-customers-row">
                     <TableCell colSpan={6} align="center">
-                      No customers found
+                      {t('customers.noCustomersFound')}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -685,7 +691,7 @@ const Customers = () => {
                         <TableCell>{customer.taxNumber}</TableCell>
                         <TableCell>{getStatusChip(customer.status)}</TableCell>
                         <TableCell align="right">
-                          <Tooltip title="View Orders">
+                          <Tooltip title={t('customers.actions.viewOrders')}>
                             <IconButton 
                               size="small" 
                               onClick={(e) => {
@@ -698,7 +704,7 @@ const Customers = () => {
                               <OrderIcon />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="View Invoices">
+                          <Tooltip title={t('customers.actions.viewInvoices')}>
                             <IconButton 
                               size="small" 
                               onClick={(e) => {
@@ -711,7 +717,7 @@ const Customers = () => {
                               <ReceiptIcon />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Edit">
+                          <Tooltip title={t('common.edit')}>
                             <IconButton 
                               size="small" 
                               onClick={(e) => {
@@ -723,7 +729,7 @@ const Customers = () => {
                               <EditIcon />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Delete">
+                          <Tooltip title={t('common.delete')}>
                             <IconButton 
                               size="small" 
                               onClick={(e) => {
@@ -756,62 +762,62 @@ const Customers = () => {
 
       {/* Customer Form Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
-        <DialogTitle>{isEditing ? 'Edit Customer' : 'Add New Customer'}</DialogTitle>
+        <DialogTitle>{isEditing ? t('customers.editCustomer') : t('customers.addNewCustomer')}</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12}>
               <TextField
                 name="name"
-                label="Customer Name"
+                label={t('customers.form.name')}
                 value={formData.name || ''}
                 onChange={handleInputChange}
                 fullWidth
                 required
                 error={!formData.name}
-                helperText={!formData.name ? 'Customer name is required' : ''}
+                helperText={!formData.name ? t('customers.form.nameRequired') : ''}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 name="email"
-                label="Email"
+                label={t('customers.form.email')}
                 type="email"
                 value={formData.email || ''}
                 onChange={handleInputChange}
                 fullWidth
                 required
                 error={!formData.email}
-                helperText={!formData.email ? 'Email is required' : ''}
+                helperText={!formData.email ? t('customers.form.emailRequired') : ''}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 name="phone"
-                label="Phone"
+                label={t('customers.form.phone')}
                 value={formData.phone || ''}
                 onChange={handleInputChange}
                 fullWidth
                 required
                 error={!formData.phone}
-                helperText={!formData.phone ? 'Phone is required' : ''}
+                helperText={!formData.phone ? t('customers.form.phoneRequired') : ''}
               />
             </Grid>
             <Grid item xs={12}>
               <TextField
                 name="address"
-                label="Address"
+                label={t('customers.form.address')}
                 value={formData.address || ''}
                 onChange={handleInputChange}
                 fullWidth
                 required
                 error={!formData.address}
-                helperText={!formData.address ? 'Address is required' : ''}
+                helperText={!formData.address ? t('customers.form.addressRequired') : ''}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 name="taxNumber"
-                label="Tax Number"
+                label={t('customers.form.taxNumber')}
                 value={formData.taxNumber || ''}
                 onChange={handleInputChange}
                 fullWidth
@@ -820,7 +826,7 @@ const Customers = () => {
             <Grid item xs={12} sm={6}>
               <TextField
                 name="taxOffice"
-                label="Tax Office"
+                label={t('customers.form.taxOffice')}
                 value={formData.taxOffice || ''}
                 onChange={handleInputChange}
                 fullWidth
@@ -829,7 +835,7 @@ const Customers = () => {
             <Grid item xs={12}>
               <TextField
                 name="notes"
-                label="Notes"
+                label={t('customers.form.notes')}
                 value={formData.notes || ''}
                 onChange={handleInputChange}
                 fullWidth
@@ -840,14 +846,14 @@ const Customers = () => {
             <Grid item xs={12} sm={6}>
               <TextField
                 name="status"
-                label="Status"
+                label={t('customers.form.status')}
                 select
                 value={formData.status || 0}
                 onChange={handleInputChange}
                 fullWidth
                 required
               >
-                {customerStatuses.map((status) => (
+                {getCustomerStatuses(t).map((status) => (
                   <MenuItem key={status.value} value={status.value}>
                     {status.label}
                   </MenuItem>
@@ -857,30 +863,29 @@ const Customers = () => {
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button onClick={handleCloseDialog}>{t('common.cancel')}</Button>
           <Button 
             onClick={handleSubmit} 
             variant="contained" 
             color="primary"
           >
-            {isEditing ? 'Update' : 'Create'}
+            {isEditing ? t('common.update') : t('common.create')}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
-        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogTitle>{t('customers.deleteConfirmation.title')}</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete the customer "{customerToDelete?.name}"?
-            This action cannot be undone.
+            {t('customers.deleteConfirmation.message', { name: customerToDelete?.name })}
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDeleteDialog(false)}>Cancel</Button>
+          <Button onClick={() => setOpenDeleteDialog(false)}>{t('common.cancel')}</Button>
           <Button onClick={handleDeleteConfirm} color="error" variant="contained">
-            Delete
+            {t('common.delete')}
           </Button>
         </DialogActions>
       </Dialog>

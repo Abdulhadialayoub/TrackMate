@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { 
   Box, 
   TextField, 
@@ -22,6 +23,8 @@ import { authService } from '../services/api';
 
 const Register = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  
   const [formData, setFormData] = useState({
     companyName: '',
     firstName: '',
@@ -69,37 +72,37 @@ const Register = () => {
     const newErrors = {};
     
     if (!formData.companyName || !formData.companyName.trim()) {
-      newErrors.companyName = 'Company name is required';
+      newErrors.companyName = t('register.companyInfo.companyNameRequired');
     }
     
     if (!formData.firstName) {
-      newErrors.firstName = 'First name is required';
+      newErrors.firstName = t('register.personalInfo.firstNameRequired');
     }
     
     if (!formData.lastName) {
-      newErrors.lastName = 'Last name is required';
+      newErrors.lastName = t('register.personalInfo.lastNameRequired');
     }
     
     if (!formData.email) {
-      newErrors.email = 'Email is required';
+      newErrors.email = t('register.personalInfo.emailRequired');
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email is invalid';
+      newErrors.email = t('register.personalInfo.emailInvalid');
     }
     
     if (!formData.phone) {
-      newErrors.phone = 'Phone number is required';
+      newErrors.phone = t('register.personalInfo.phoneRequired');
     }
     
     if (!formData.password) {
-      newErrors.password = 'Password is required';
+      newErrors.password = t('register.security.passwordRequired');
     } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+      newErrors.password = t('register.security.passwordLength');
     }
     
     if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password';
+      newErrors.confirmPassword = t('register.security.confirmPasswordRequired');
     } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
+      newErrors.confirmPassword = t('register.security.passwordsDoNotMatch');
     }
     
     setErrors(newErrors);
@@ -132,12 +135,12 @@ const Register = () => {
       if (result.success) {
         console.log('Registration successful, redirecting to dashboard');
         // Registration automatically logs the user in with the updated API service
-        navigate('/dashboard');
+        navigate('/login');
       } else {
-        setApiError(result.message || 'Registration failed');
+        setApiError(result.message || t('register.errors.registrationFailed'));
       }
     } catch (error) {
-      setApiError('An unexpected error occurred. Please try again.');
+      setApiError(t('register.errors.unexpectedError'));
       console.error('Registration error:', error);
     } finally {
       setLoading(false);
@@ -187,10 +190,10 @@ const Register = () => {
               TrackMate
             </Typography>
             <Typography variant="h5" textAlign="center" gutterBottom>
-              Create New Account
+              {t('register.title')}
             </Typography>
             <Typography variant="body1" color="text.secondary" textAlign="center">
-              Get started with TrackMate and transform your business management
+              {t('register.subtitle')}
             </Typography>
           </Box>
           
@@ -203,13 +206,13 @@ const Register = () => {
           <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
             <Box sx={{ mb: 4 }}>
               <Typography variant="h6" color="primary" gutterBottom>
-                Company Information
+                {t('register.companyInfo.title')}
               </Typography>
               <TextField
                 required
                 fullWidth
                 id="companyName"
-                label="Company Name"
+                label={t('register.companyInfo.companyName')}
                 name="companyName"
                 autoComplete="organization"
                 autoFocus
@@ -225,7 +228,7 @@ const Register = () => {
             
             <Box sx={{ mb: 4 }}>
               <Typography variant="h6" color="primary" gutterBottom>
-                Personal Information
+                {t('register.personalInfo.title')}
               </Typography>
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
@@ -233,7 +236,7 @@ const Register = () => {
                     required
                     fullWidth
                     id="firstName"
-                    label="First Name"
+                    label={t('register.personalInfo.firstName')}
                     name="firstName"
                     autoComplete="given-name"
                     value={formData.firstName}
@@ -248,7 +251,7 @@ const Register = () => {
                     required
                     fullWidth
                     id="lastName"
-                    label="Last Name"
+                    label={t('register.personalInfo.lastName')}
                     name="lastName"
                     autoComplete="family-name"
                     value={formData.lastName}
@@ -263,7 +266,7 @@ const Register = () => {
                     required
                     fullWidth
                     id="email"
-                    label="Email Address"
+                    label={t('register.personalInfo.email')}
                     name="email"
                     autoComplete="email"
                     value={formData.email}
@@ -278,7 +281,7 @@ const Register = () => {
                     required
                     fullWidth
                     id="phone"
-                    label="Phone Number"
+                    label={t('register.personalInfo.phone')}
                     name="phone"
                     autoComplete="tel"
                     value={formData.phone}
@@ -295,7 +298,7 @@ const Register = () => {
             
             <Box sx={{ mb: 4 }}>
               <Typography variant="h6" color="primary" gutterBottom>
-                Security
+                {t('register.security.title')}
               </Typography>
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
@@ -303,7 +306,7 @@ const Register = () => {
                     required
                     fullWidth
                     name="password"
-                    label="Password"
+                    label={t('register.security.password')}
                     type={showPassword ? 'text' : 'password'}
                     id="password"
                     autoComplete="new-password"
@@ -316,7 +319,7 @@ const Register = () => {
                       endAdornment: (
                         <InputAdornment position="end">
                           <IconButton
-                            aria-label="toggle password visibility"
+                            aria-label={t('register.security.togglePassword')}
                             onClick={handleTogglePasswordVisibility}
                             edge="end"
                           >
@@ -332,7 +335,7 @@ const Register = () => {
                     required
                     fullWidth
                     name="confirmPassword"
-                    label="Confirm Password"
+                    label={t('register.security.confirmPassword')}
                     type={showConfirmPassword ? 'text' : 'password'}
                     id="confirmPassword"
                     autoComplete="new-password"
@@ -345,7 +348,7 @@ const Register = () => {
                       endAdornment: (
                         <InputAdornment position="end">
                           <IconButton
-                            aria-label="toggle password visibility"
+                            aria-label={t('register.security.togglePassword')}
                             onClick={handleToggleConfirmPasswordVisibility}
                             edge="end"
                           >
@@ -377,13 +380,13 @@ const Register = () => {
               {loading ? (
                 <CircularProgress size={24} color="inherit" />
               ) : (
-                'Create Account'
+                t('register.submit')
               )}
             </Button>
             
             <Box sx={{ mt: 3, textAlign: 'center' }}>
               <Typography variant="body1">
-                Already have an account?{' '}
+                {t('register.alreadyHaveAccount')}{' '}
                 <Link 
                   to="/login" 
                   style={{ 
@@ -392,7 +395,7 @@ const Register = () => {
                     fontWeight: 'bold' 
                   }}
                 >
-                  Sign In
+                  {t('register.signIn')}
                 </Link>
               </Typography>
             </Box>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   Box, 
   Button, 
@@ -39,14 +40,14 @@ import {
   Add as AddIcon, 
   Edit as EditIcon, 
   Delete as DeleteIcon,
-  Search as SearchIcon,
   Refresh as RefreshIcon,
+  Search as SearchIcon,
   Receipt as ReceiptIcon,
-  ShoppingCart as OrderIcon,
-  AddShoppingCart as AddItemIcon,
   RemoveShoppingCart as RemoveItemIcon,
   ReceiptLong as InvoiceIcon,
-  Psychology as PsychologyIcon
+  Psychology as PsychologyIcon,
+  Clear as ClearIcon,
+  ShoppingCart as ShoppingCartIcon
 } from '@mui/icons-material';
 import { orderService } from '../services/orderService';
 import { customerService } from '../services/customerService';
@@ -55,20 +56,22 @@ import { invoiceService } from '../services/invoiceService';
 import { dashboardService } from '../services/dashboardService';
 import { useNavigate, useLocation } from 'react-router-dom';
 import OrderAIAnalysis from './OrderAIAnalysis';
-
-const orderStatuses = [
-  { value: 0, label: 'Draft', color: 'default', stringValue: 'Draft' },
-  { value: 1, label: 'Pending', color: 'warning', stringValue: 'Pending' },
-  { value: 2, label: 'Confirmed', color: 'info', stringValue: 'Confirmed' },
-  { value: 3, label: 'Shipped', color: 'primary', stringValue: 'Shipped' },
-  { value: 4, label: 'Delivered', color: 'success', stringValue: 'Delivered' },
-  { value: 5, label: 'Cancelled', color: 'error', stringValue: 'Cancelled' },
-  { value: 6, label: 'Completed', color: 'secondary', stringValue: 'Completed' }
-];
+import { tr } from 'framer-motion/client';
 
 const Orders = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
+
+  const orderStatuses = [
+    { value: 0, label: t('orders.statuses.draft'), color: 'default', stringValue: 'Draft' },
+    { value: 1, label: t('orders.statuses.pending'), color: 'warning', stringValue: 'Pending' },
+    { value: 2, label: t('orders.statuses.confirmed'), color: 'info', stringValue: 'Confirmed' },
+    { value: 3, label: t('orders.statuses.shipped'), color: 'primary', stringValue: 'Shipped' },
+    { value: 4, label: t('orders.statuses.delivered'), color: 'success', stringValue: 'Delivered' },
+    { value: 5, label: t('orders.statuses.cancelled'), color: 'error', stringValue: 'Cancelled' },
+    { value: 6, label: t('orders.statuses.completed'), color: 'secondary', stringValue: 'Completed' }
+  ];
 
   // Helper function for date formatting
   const formatDateForInput = (date) => {
@@ -139,6 +142,8 @@ const Orders = () => {
   const [orderForInvoice, setOrderForInvoice] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [showAIAnalysis, setShowAIAnalysis] = useState(false);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [selectedStatus, setSelectedStatus] = useState('all');
 
   // Initial state for the form data
   const initialFormState = {
@@ -1170,8 +1175,10 @@ const Orders = () => {
             }
           }
           
-          // Ensure status is properly set
-          if (orderData.status === undefined || orderData.status === null) {
+          // Ensure status is numeric
+          if (typeof orderData.status === 'string') {
+            orderData.status = parseInt(orderData.status) || 0;
+          } else if (orderData.status === undefined || orderData.status === null) {
             console.warn("Order has no status, defaulting to Draft");
             orderData.status = 0; // Draft
           }
@@ -1476,44 +1483,21 @@ const Orders = () => {
 
   const filteredOrders = filterOrders();
 
-  const calculateOrderTotal = (items) => {
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return 0;
-    }
-    
+  const calculateOrderTotal = (items = []) => {
     return items.reduce((total, item) => {
-      // Convert all values to numbers and handle discount correctly
-      const quantity = parseFloat(item.quantity) || 1;
-      const unitPrice = parseFloat(item.unitPrice) || 0;
-      const discount = parseFloat(item.discount) || 0;
-      
-      // Calculate item total with discount applied
-      const itemTotal = (quantity * unitPrice) * (1 - discount / 100);
-      
-      // Return a properly rounded number
-      return total + parseFloat(itemTotal.toFixed(2));
+      const itemTotal = item.quantity * item.unitPrice * (1 - (item.discount || 0) / 100);
+      return total + itemTotal;
     }, 0);
   };
   
   const getOrderGrandTotal = () => {
-    const subtotal = calculateOrderTotal(formData.items);
-    const taxRate = parseFloat(formData.taxRate || 0);
-    const taxAmount = (subtotal * taxRate) / 100;
-    const shippingCost = parseFloat(formData.shippingCost || 0);
+    if (!selectedOrder || !selectedOrder.items) return 0;
     
-    // Double-check the calculation to ensure it's correct
-    const calculatedTotal = subtotal + taxAmount + shippingCost;
+    const subtotal = calculateOrderTotal(selectedOrder.items);
+    const taxAmount = (subtotal * (selectedOrder.taxRate || 0)) / 100;
+    const shippingCost = selectedOrder.shippingCost || 0;
     
-    console.log('Order grand total calculation:', {
-      subtotal,
-      taxRate,
-      taxAmount,
-      shippingCost,
-      calculatedTotal
-    });
-    
-    // Calculate grand total and round to 2 decimal places
-    return parseFloat(calculatedTotal.toFixed(2));
+    return subtotal + taxAmount + shippingCost;
   };
 
   const calculateGrandTotalFromSelectedOrder = () => {
@@ -1607,34 +1591,362 @@ const Orders = () => {
     );
   };
 
+  const handleClick = async (event, id) => {
+    event.stopPropagation();
+    
+    // Fetch and show order details
+    try {
+      setLoading(true);
+      const result = await orderService.getById(id);
+      if (result.success && result.data) {
+        // Ensure status is numeric for proper button enabling/disabling
+        const orderData = {
+          ...result.data,
+          status: typeof result.data.status === 'string' ? 
+            parseInt(result.data.status) : 
+            result.data.status
+        };
+        setSelectedOrder(orderData);
+      }
+    } catch (error) {
+      console.error('Error fetching order details:', error);
+      showSnackbar(t('orders.messages.fetchError'), 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearchChange = (event) => {
+    setSearchTerm(event.target.value);
+  };
+
+  const handleStatusFilterChange = (event) => {
+    setStatusFilter(event.target.value);
+  };
+
+  const handleCreateInvoiceClick = (order) => {
+    setOrderForInvoice(order);
+    setOpenInvoiceDialog(true);
+  };
+
+  // Filter options
+  const statusOptions = [
+    { value: 'all', label: t('orders.filter.allStatuses') },
+    ...orderStatuses.map(status => ({
+      value: status.stringValue.toLowerCase(),
+      label: status.label
+    }))
+  ];
+
+  // Table columns configuration
+  const columns = [
+    { 
+      field: 'orderNumber', 
+      headerName: t('orders.table.orderNumber'),
+      flex: 1,
+      minWidth: 130 
+    },
+    { 
+      field: 'customerName', 
+      headerName: t('orders.table.customer'),
+      flex: 2,
+      minWidth: 200 
+    },
+    { 
+      field: 'orderDate', 
+      headerName: t('orders.table.orderDate'),
+      flex: 1,
+      minWidth: 150,
+      valueFormatter: (params) => {
+        return formatDate(params.value);
+      }
+    },
+    { 
+      field: 'status', 
+      headerName: t('orders.table.status'),
+      flex: 1,
+      minWidth: 100,
+      valueFormatter: (params) => {
+        return getStatusText(params.value);
+      }
+    },
+    { 
+      field: 'total', 
+      headerName: t('orders.table.total'),
+      flex: 1,
+      minWidth: 100,
+      valueFormatter: (params) => {
+        return `${params.value} ${params.row.currency}`;
+      }
+    },
+    { 
+      field: 'actions', 
+      headerName: t('orders.table.actions'),
+      flex: 1,
+      minWidth: 150,
+      renderCell: (params) => {
+        return (
+          <>
+            <Tooltip title={t('common.edit')}>
+              <IconButton 
+                size="small" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenDialog(params.row);
+                }}
+              >
+                <EditIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={t('common.delete')}>
+              <IconButton 
+                size="small"
+                color="error"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteClick(params.row);
+                }}
+              >
+                <DeleteIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={t('orders.actions.createInvoice')}>
+              <IconButton 
+                size="small"
+                color="primary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCreateInvoiceClick(params.row);
+                }}
+              >
+                <ReceiptIcon />
+              </IconButton>
+            </Tooltip>
+          </>
+        );
+      }
+    }
+  ];
+
   return (
     <Box sx={{ p: 3 }}>
-      {selectedOrder ? (
-        // Order details view
-        <Box>
+      {/* Header */}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h4" component="h1" gutterBottom>
-              Order #{selectedOrder.orderNumber}
+          {t('orders.title')}
             </Typography>
             <Box>
               <Button 
                 variant="outlined" 
-                color="primary"
-                startIcon={<EditIcon />}
-                onClick={() => handleOpenDialog(selectedOrder)}
+                color="info"
+                startIcon={<PsychologyIcon />}
+                onClick={() => navigate('/orders-analysis')}
                 sx={{ mr: 2 }}
               >
-                Edit Order
+                {t('orders.actions.bulkAIAnalysis')}
+              </Button>
+              <Button 
+            variant="contained" 
+                color="primary"
+            startIcon={<AddIcon />} 
+            onClick={() => handleOpenDialog(null)}
+                sx={{ mr: 2 }}
+              >
+            {t('orders.actions.newOrder')}
               </Button>
               <Button 
                 variant="outlined" 
-                color="secondary"
-                startIcon={<InvoiceIcon />}
-                onClick={() => handleCreateInvoice(selectedOrder.id)}
-                sx={{ mr: 2 }}
-                disabled={selectedOrder.status === 'Draft' || selectedOrder.status === 0 || loading}
+            color="primary" 
+            startIcon={<RefreshIcon />} 
+            onClick={fetchOrders}
+          >
+            {t('orders.actions.refreshOrders')}
+          </Button>
+        </Box>
+      </Box>
+
+      {/* Description */}
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        {t('orders.description')}
+      </Typography>
+
+      {/* Filters */}
+      <Box sx={{ mb: 3 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} sm={6} md={4}>
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder={t('orders.searchPlaceholder')}
+              value={searchTerm}
+              onChange={handleSearchChange}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+                endAdornment: searchTerm && (
+                  <InputAdornment position="end">
+                    <IconButton size="small" onClick={() => setSearchTerm('')}>
+                      <ClearIcon />
+                    </IconButton>
+                  </InputAdornment>
+                )
+              }}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={4}>
+            <FormControl fullWidth size="small">
+              <InputLabel id="status-filter-label">{t('orders.filter.filterByStatus')}</InputLabel>
+              <Select
+                labelId="status-filter-label"
+                value={statusFilter}
+                label={t('orders.filter.filterByStatus')}
+                onChange={(e) => setStatusFilter(e.target.value)}
               >
-                Create Invoice
+                <MenuItem value="all">{t('orders.filter.allStatuses')}</MenuItem>
+                {orderStatuses.map((status) => (
+                  <MenuItem key={status.value} value={status.value.toString()}>
+                    {status.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+        </Grid>
+      </Box>
+
+      {/* Orders table */}
+      {orders.length > 0 ? (
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>{t('orders.table.orderNumber')}</TableCell>
+                <TableCell>{t('orders.table.customer')}</TableCell>
+                <TableCell>{t('orders.table.orderDate')}</TableCell>
+                <TableCell align="right">{t('orders.table.total')}</TableCell>
+                <TableCell>{t('orders.table.status')}</TableCell>
+                <TableCell align="right">{t('orders.table.actions')}</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filterOrders().slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((order) => {
+                const status = orderStatuses.find(s => s.value === order.status) || orderStatuses[0];
+                return (
+                  <TableRow 
+                    key={order.id}
+                    hover
+                    onClick={(e) => handleClick(e, order.id)}
+                    sx={{ cursor: 'pointer' }}
+                  >
+                    <TableCell>{order.orderNumber}</TableCell>
+                    <TableCell>
+                      {order.customerName || order.customer?.name || t('orders.unknownCustomer')}
+                    </TableCell>
+                    <TableCell>
+                      {order.orderDate ? 
+                        new Date(order.orderDate).toLocaleDateString() : 
+                        t('orders.invalidDate')}
+                    </TableCell>
+                    <TableCell align="right">
+                      {order.total?.toFixed(2) || t('orders.na')} {order.currency || 'USD'}
+                    </TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={status.label}
+                        color={status.color}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      
+                      <Tooltip title={t('common.delete')}>
+                        <IconButton 
+                          size="small"
+                          color="error"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClick(order);
+                          }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title={t('orders.actions.createInvoice')}>
+                        <IconButton 
+                          size="small"
+                          color="primary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCreateInvoiceClick(order);
+                          }}
+                        >
+                          <ReceiptIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+          <TablePagination
+            rowsPerPageOptions={[5, 10, 25]}
+            component="div"
+            count={totalOrders}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+          />
+        </TableContainer>
+      ) : (
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 3 }}>
+          <ShoppingCartIcon sx={{ fontSize: 100, color: 'text.secondary', mb: 2 }} />
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            {t('orders.messages.noOrdersFound')}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2, maxWidth: 450, textAlign: 'center' }}>
+            {searchTerm ? 
+              t('orders.messages.noSearchResults', { term: searchTerm }) : 
+              t('orders.messages.noOrdersInSystem')}
+          </Typography>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDialog(null)}
+          >
+            {t('orders.actions.newOrder')}
+          </Button>
+        </Box>
+      )}
+
+      {/* Order details dialog */}
+      <Dialog 
+        open={!!selectedOrder} 
+        onClose={handleCloseDetails}
+        maxWidth="lg"
+        fullWidth
+      >
+        {selectedOrder && (
+          <>
+            <DialogTitle>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="h6">
+                  {t('orders.orderDetails.title', { number: selectedOrder.orderNumber })}
+                </Typography>
+                <Box>
+                  <Button 
+                    variant="outlined" 
+                    color="primary"
+                    startIcon={<EditIcon />}
+                    onClick={() => handleOpenDialog(selectedOrder)}
+                sx={{ mr: 2 }}
+              >
+                    {t('common.edit')}
               </Button>
               <Button 
                 variant="outlined" 
@@ -1650,124 +1962,124 @@ const Orders = () => {
                 }}
                 sx={{ mr: 2 }}
               >
-                AI Analysis
+                {t('orders.actions.aiAnalysis')}
+              </Button>
+              <Button 
+                variant="outlined" 
+                    color="primary"
+                    startIcon={<ReceiptIcon />}
+                    onClick={() => handleCreateInvoiceClick(selectedOrder)}
+                sx={{ mr: 2 }}
+                    disabled={selectedOrder.status === 0}
+              >
+                    {t('orders.actions.createInvoice')}
               </Button>
               <Button 
                 variant="outlined" 
                 onClick={handleCloseDetails}
               >
-                Back to Orders
+                    {t('orders.actions.backToOrders')}
               </Button>
             </Box>
           </Box>
-
+            </DialogTitle>
+            <DialogContent>
           <Paper sx={{ mb: 3, p: 3 }}>
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
-                <Typography variant="h6" gutterBottom>Order Information</Typography>
+                    <Typography variant="h6" gutterBottom>{t('orders.orderDetails.orderInfo')}</Typography>
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">Customer:</Typography>
-                  <Typography>{selectedOrder.customerName || selectedOrder.customer?.name || 'Unknown Customer'}</Typography>
+                      <Typography variant="subtitle2">{t('orders.orderDetails.customer')}:</Typography>
+                      <Typography>{selectedOrder.customerName || selectedOrder.customer?.name || t('orders.unknownCustomer')}</Typography>
                 </Box>
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">Order Date:</Typography>
+                      <Typography variant="subtitle2">{t('orders.orderDetails.orderDate')}:</Typography>
                   <Typography>
                     {selectedOrder.orderDate ? 
-                      (() => {
-                        try {
-                          return new Date(selectedOrder.orderDate).toLocaleDateString();
-                        } catch (error) {
-                          console.error('Invalid date:', selectedOrder.orderDate);
-                          return 'Invalid Date';
-                        }
-                      })() 
-                      : 'N/A'}
+                          new Date(selectedOrder.orderDate).toLocaleDateString() : 
+                          t('orders.invalidDate')}
                   </Typography>
                 </Box>
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">Status:</Typography>
-                  {getStatusChip(selectedOrder.status)}
+                      <Typography variant="subtitle2">{t('orders.orderDetails.status')}:</Typography>
+                      <Chip 
+                        label={orderStatuses.find(s => s.value === selectedOrder.status)?.label || t('orders.unknownStatus')}
+                        color={orderStatuses.find(s => s.value === selectedOrder.status)?.color || 'default'}
+                        size="small"
+                      />
                 </Box>
               </Grid>
               <Grid item xs={12} md={6}>
-                <Typography variant="h6" gutterBottom>Shipping Information</Typography>
+                    <Typography variant="h6" gutterBottom>{t('orders.orderDetails.shippingInfo')}</Typography>
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">Shipping Address:</Typography>
-                  <Typography>{selectedOrder.shippingAddress || 'N/A'}</Typography>
+                      <Typography variant="subtitle2">{t('orders.orderDetails.shippingAddress')}:</Typography>
+                      <Typography>{selectedOrder.shippingAddress || t('orders.na')}</Typography>
                 </Box>
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">Shipping Method:</Typography>
-                  <Typography>{selectedOrder.shippingMethod || 'N/A'}</Typography>
+                      <Typography variant="subtitle2">{t('orders.orderDetails.shippingMethod')}:</Typography>
+                      <Typography>{selectedOrder.shippingMethod || t('orders.na')}</Typography>
                 </Box>
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">Tracking Number:</Typography>
-                  <Typography>{selectedOrder.trackingNumber || 'N/A'}</Typography>
+                      <Typography variant="subtitle2">{t('orders.orderDetails.trackingNumber')}:</Typography>
+                      <Typography>{selectedOrder.trackingNumber || t('orders.na')}</Typography>
                 </Box>
               </Grid>
             </Grid>
           </Paper>
 
           <Paper sx={{ mb: 3 }}>
-            <Typography variant="h6" sx={{ p: 2 }}>Order Items</Typography>
+                <Typography variant="h6" sx={{ p: 2 }}>{t('orders.form.orderItems')}</Typography>
             <TableContainer>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Product</TableCell>
-                    <TableCell>Quantity</TableCell>
-                    <TableCell>Unit Price</TableCell>
-                    <TableCell>Discount</TableCell>
-                    <TableCell align="right">Total</TableCell>
+                        <TableCell>{t('orders.table.product')}</TableCell>
+                        <TableCell>{t('orders.table.quantity')}</TableCell>
+                        <TableCell>{t('orders.table.unitPrice')}</TableCell>
+                        <TableCell>{t('orders.table.discount')}</TableCell>
+                        <TableCell align="right">{t('orders.table.total')}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {selectedOrder.items && selectedOrder.items.length > 0 ? (
                     selectedOrder.items.map((item, index) => (
                       <TableRow key={index}>
-                        <TableCell>{item.productName || item.product?.name || 'Unknown Product'}</TableCell>
+                            <TableCell>{item.productName || item.product?.name || t('orders.unknownProduct')}</TableCell>
                         <TableCell>{item.quantity}</TableCell>
                         <TableCell>{(item.unitPrice || 0).toFixed(2)}</TableCell>
                         <TableCell>{item.discount}%</TableCell>
-                        <TableCell align="right">{(item.total || item.totalAmount || (item.quantity * item.unitPrice) || 0).toFixed(2)}</TableCell>
-                      </TableRow>
-                    ))
-                  ) : selectedOrder.orderItems && selectedOrder.orderItems.length > 0 ? (
-                    selectedOrder.orderItems.map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell>{item.productName || item.product?.name || 'Unknown Product'}</TableCell>
-                        <TableCell>{item.quantity}</TableCell>
-                        <TableCell>{(item.unitPrice || 0).toFixed(2)}</TableCell>
-                        <TableCell>{item.discount}%</TableCell>
-                        <TableCell align="right">{(item.total || item.totalAmount || (item.quantity * item.unitPrice) || 0).toFixed(2)}</TableCell>
+                            <TableCell align="right">{(item.total || (item.quantity * item.unitPrice * (1 - item.discount / 100)) || 0).toFixed(2)}</TableCell>
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={5} align="center">No items found</TableCell>
+                          <TableCell colSpan={5} align="center">{t('orders.messages.noItems')}</TableCell>
                     </TableRow>
                   )}
                   <TableRow>
-                    <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>Subtotal:</TableCell>
+                        <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>{t('orders.table.subtotal')}:</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                      {selectedOrder.subTotal?.toFixed(2) || '0.00'} {selectedOrder.currency || 'USD'}
+                          {calculateOrderTotal(selectedOrder.items || []).toFixed(2)} {selectedOrder.currency || 'USD'}
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>Tax ({selectedOrder.taxRate || 0}%):</TableCell>
+                        <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>
+                          {t('orders.table.taxWithRate', { rate: selectedOrder.taxRate || 0 })}:
+                        </TableCell>
                     <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                      {selectedOrder.taxAmount?.toFixed(2) || (selectedOrder.subTotal * (selectedOrder.taxRate || 0) / 100).toFixed(2) || '0.00'} {selectedOrder.currency || 'USD'}
+                          {((calculateOrderTotal(selectedOrder.items || []) * (selectedOrder.taxRate || 0)) / 100).toFixed(2)} {selectedOrder.currency || 'USD'}
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>Shipping Cost:</TableCell>
+                        <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>{t('orders.table.shippingCost')}:</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                      {selectedOrder.shippingCost?.toFixed(2) || '0.00'} {selectedOrder.currency || 'USD'}
+                          {(selectedOrder.shippingCost || 0).toFixed(2)} {selectedOrder.currency || 'USD'}
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold', fontSize: '1.1em' }}>Grand Total:</TableCell>
+                        <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold', fontSize: '1.1em' }}>{t('orders.table.grandTotal')}:</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '1.1em', color: 'primary.main' }}>
-                      {calculateGrandTotalFromSelectedOrder().toFixed(2)} {selectedOrder.currency || 'USD'}
+                          {getOrderGrandTotal().toFixed(2)} {selectedOrder.currency || 'USD'}
                     </TableCell>
                   </TableRow>
                 </TableBody>
@@ -1777,284 +2089,24 @@ const Orders = () => {
 
           {selectedOrder.notes && (
             <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>Notes</Typography>
+                  <Typography variant="h6" gutterBottom>{t('orders.form.notes')}</Typography>
               <Typography>{selectedOrder.notes}</Typography>
             </Paper>
           )}
-          
-          {/* AI Analysis Section */}
-          {showAIAnalysis && (
-            <Paper sx={{ p: 3, mt: 3 }}>
-              <OrderAIAnalysis 
-                orderData={selectedOrder} 
-                onAnalysisComplete={(analysis) => {
-                  console.log('AI analysis completed:', analysis);
-                  // You can store this in state or do something with it if needed
-                }}
-              />
-            </Paper>
-          )}
-        </Box>
-      ) : (
-        // Orders list view
-        <>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <div>
-              <Typography variant="h4" component="h1" gutterBottom>
-                Orders Management
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Manage all your orders here. The system supports multiple orders from the same customer.
-              </Typography>
-              {statusFilter !== 'all' && (
-                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
-                  <Typography variant="body2" sx={{ fontWeight: 'bold', mr: 1 }}>
-                    Filtered by status:
-                  </Typography>
-                  <Chip
-                    label={orderStatuses.find(s => s.value === parseInt(statusFilter))?.label || 'Unknown'}
-                    color={orderStatuses.find(s => s.value === parseInt(statusFilter))?.color || 'default'}
-                    size="small"
-                    onDelete={() => setStatusFilter('all')}
-                  />
-                </Box>
-              )}
-            </div>
-            <Box sx={{ display: 'flex' }}>
-              <Button 
-                variant="outlined" 
-                color="info"
-                startIcon={<PsychologyIcon />}
-                onClick={() => navigate('/orders-analysis')}
-                sx={{ mr: 2 }}
-              >
-                Bulk AI Analysis
-              </Button>
-              <Button 
-                variant="contained" 
-                color="primary" 
-                startIcon={<AddIcon />}
-                onClick={() => handleOpenDialog()}
-              >
-                New Order
-              </Button>
-            </Box>
-          </Box>
-
-          <Paper sx={{ mb: 3, p: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <TextField
-                variant="outlined"
-                placeholder="Search orders..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                size="small"
-                sx={{ mr: 2, flexGrow: 1 }}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-              <FormControl variant="outlined" size="small" sx={{ minWidth: 200, mr: 2 }}>
-                <InputLabel id="status-filter-label">Status</InputLabel>
-                <Select
-                  labelId="status-filter-label"
-                  id="status-filter"
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  label="Status"
-                >
-                  <MenuItem value="all">All Statuses</MenuItem>
-                  {orderStatuses.map((status) => (
-                    <MenuItem key={status.value} value={status.value.toString()}>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <Box 
-                          sx={{ 
-                            width: 10, 
-                            height: 10, 
-                            borderRadius: '50%', 
-                            bgcolor: `${status.color}.main`,
-                            mr: 1
-                          }} 
-                        />
-                        {status.label}
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <Button
-                variant="contained"
-                color="primary"
-                startIcon={<RefreshIcon />}
-                onClick={fetchOrders}
-                sx={{ mr: 1 }}
-                disabled={loading}
-              >
-                Refresh Orders
-              </Button>
-            </Box>
-          </Paper>
-
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
-
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Order #</TableCell>
-                  <TableCell>Customer</TableCell>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Total</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center">
-                      <CircularProgress size={40} />
-                    </TableCell>
-                  </TableRow>
-                ) : filteredOrders.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center">
-                      <Box sx={{ py: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        <OrderIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
-                        <Typography variant="h6" color="text.secondary" gutterBottom>
-                          No orders found
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2, maxWidth: 450, textAlign: 'center' }}>
-                          {searchTerm ? 
-                            `No orders match the search term "${searchTerm}". Try a different search or clear the search field.` : 
-                            'There are no orders in the system for your company. You can create a new order using the button above.'}
-                        </Typography>
-                        <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
-                          {searchTerm && (
-                            <Button 
-                              variant="outlined" 
-                              size="small"
-                              onClick={() => setSearchTerm('')}
-                            >
-                              Clear Search
-                            </Button>
-                          )}
-                          <Button
-                            variant="contained"
-                            color="primary"
-                            size="small"
-                            startIcon={<AddIcon />}
-                            onClick={() => handleOpenDialog()}
-                          >
-                            Create New Order
-                          </Button>
-                        </Box>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredOrders
-                    .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                    .map((order) => (
-                      <TableRow 
-                        key={order.id || `order-${Math.random().toString(36).substring(2, 11)}`}
-                        hover
-                        onClick={() => handleOrderSelect(order)}
-                        sx={{ cursor: 'pointer' }}
-                      >
-                        <TableCell>{order.orderNumber}</TableCell>
-                        <TableCell>
-                          {order.customerName || 
-                           (order.customer?.name) || 
-                           (order.customerId ? `Customer #${order.customerId}` : 'Unknown Customer')}
-                        </TableCell>
-                        <TableCell>
-                          {order.orderDate ? 
-                            (() => {
-                              try {
-                                return new Date(order.orderDate).toLocaleDateString();
-                              } catch (error) {
-                                console.error('Invalid date:', order.orderDate);
-                                return 'Invalid Date';
-                              }
-                            })() 
-                            : new Date().toLocaleDateString()} {/* Fallback to today's date */}
-                        </TableCell>
-                        <TableCell>{(order.total || order.totalAmount || 0).toFixed(2)} {order.currency || 'USD'}</TableCell>
-                        <TableCell>
-                          {getStatusChip(order.status)}
-                        </TableCell>
-                        <TableCell align="right">
-                          <Tooltip title="Edit">
-                            <span>
-                              
-                            </span>
-                          </Tooltip>
-                          <Tooltip title="Create Invoice">
-                            <span>
-                              <IconButton 
-                                size="small" 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleCreateInvoice(order.id);
-                                }}
-                                color="secondary"
-                                disabled={order.status === 0 || order.status === 'Draft' || loading}
-                              >
-                                <InvoiceIcon />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                          <Tooltip title="Delete">
-                            <span>
-                              <IconButton 
-                                size="small" 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteClick(order);
-                                }}
-                                color="error"
-                              >
-                                <DeleteIcon />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                )}
-              </TableBody>
-            </Table>
-            <TablePagination
-              rowsPerPageOptions={[5, 10, 25]}
-              component="div"
-              count={filteredOrders.length}
-              rowsPerPage={rowsPerPage}
-              page={page}
-              onPageChange={handleChangePage}
-              onRowsPerPageChange={handleChangeRowsPerPage}
-            />
-          </TableContainer>
+            </DialogContent>
         </>
       )}
+      </Dialog>
 
       {/* Order Form Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
-        <DialogTitle>{isEditing ? 'Edit Order' : 'Create New Order'}</DialogTitle>
+        <DialogTitle>{isEditing ? t('orders.dialog.editOrder') : t('orders.dialog.createOrder')}</DialogTitle>
         <DialogContent>
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
               <CircularProgress />
               <Typography variant="body1" sx={{ ml: 2 }}>
-                Loading order data...
+                {t('orders.messages.loadingOrderData')}
               </Typography>
             </Box>
           ) : (
@@ -2062,14 +2114,14 @@ const Orders = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   name="customerId"
-                  label="Customer"
+                  label={t('orders.form.customer')}
                   select
                   value={formData.customerId}
                   onChange={handleInputChange}
                   fullWidth
                   required
                 >
-                  <MenuItem value="">Select a customer</MenuItem>
+                  <MenuItem value="">{t('orders.form.selectCustomer')}</MenuItem>
                   {customers.map((customer) => (
                     <MenuItem key={customer.id} value={customer.id.toString()}>
                       {customer.name}
@@ -2080,7 +2132,7 @@ const Orders = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   name="status"
-                  label="Status"
+                  label={t('orders.form.status')}
                   select
                   value={
                     typeof formData.status === 'string' && isNaN(parseInt(formData.status))
@@ -2113,7 +2165,7 @@ const Orders = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   name="orderDate"
-                  label="Order Date"
+                  label={t('orders.form.orderDate')}
                   type="date"
                   value={formData.orderDate}
                   onChange={handleInputChange}
@@ -2124,7 +2176,7 @@ const Orders = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   name="dueDate"
-                  label="Due Date"
+                  label={t('orders.form.dueDate')}
                   type="date"
                   value={formData.dueDate}
                   onChange={handleInputChange}
@@ -2135,7 +2187,7 @@ const Orders = () => {
               <Grid item xs={12}>
                 <TextField
                   name="notes"
-                  label="Notes"
+                  label={t('orders.form.notes')}
                   value={formData.notes || ''}
                   onChange={handleInputChange}
                   fullWidth
@@ -2146,7 +2198,7 @@ const Orders = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   name="shippingCost"
-                  label="Shipping Cost"
+                  label={t('orders.form.shippingCost')}
                   type="number"
                   value={formData.shippingCost || 0}
                   onChange={handleInputChange}
@@ -2160,7 +2212,7 @@ const Orders = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   name="taxRate"
-                  label="Tax Rate (%)"
+                  label={t('orders.form.taxRate')}
                   type="number"
                   value={formData.taxRate || 0}
                   onChange={handleInputChange}
@@ -2174,7 +2226,7 @@ const Orders = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   name="currency"
-                  label="Currency"
+                  label={t('orders.form.currency')}
                   value={formData.currency || 'USD'}
                   onChange={handleInputChange}
                   fullWidth
@@ -2186,28 +2238,64 @@ const Orders = () => {
                   <MenuItem value="TRY">TRY (₺)</MenuItem>
                 </TextField>
               </Grid>
+
+              {/* Shipping Information Section */}
+              <Grid item xs={12}>
+                <Typography variant="h6" sx={{ mt: 2, mb: 2 }}>{t('orders.form.shippingInformation')}</Typography>
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  name="shippingAddress"
+                  label={t('orders.form.shippingAddress')}
+                  value={formData.shippingAddress || ''}
+                  onChange={handleInputChange}
+                  fullWidth
+                  multiline
+                  rows={3}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  name="shippingMethod"
+                  label={t('orders.form.shippingMethod')}
+                  value={formData.shippingMethod || ''}
+                  onChange={handleInputChange}
+                  fullWidth
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  name="trackingNumber"
+                  label={t('orders.form.trackingNumber')}
+                  value={formData.trackingNumber || ''}
+                  onChange={handleInputChange}
+                  fullWidth
+                />
+              </Grid>
+
+              {/* Order Items Section */}
               <Grid item xs={12}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6">Order Items</Typography>
+                  <Typography variant="h6">{t('orders.form.orderItems')}</Typography>
                   <Button 
                     variant="outlined" 
-                    startIcon={<AddItemIcon />}
+                    startIcon={<AddIcon />}
                     onClick={handleOpenItemDialog}
                     size="small"
                   >
-                    Add Item
+                    {t('orders.actions.addItem')}
                   </Button>
                 </Box>
                 <TableContainer component={Paper} variant="outlined">
                   <Table size="small">
                     <TableHead>
                       <TableRow>
-                        <TableCell>Product</TableCell>
-                        <TableCell>Quantity</TableCell>
-                        <TableCell>Unit Price</TableCell>
-                        <TableCell>Discount</TableCell>
-                        <TableCell align="right">Total</TableCell>
-                        <TableCell align="right">Actions</TableCell>
+                        <TableCell>{t('orders.table.product')}</TableCell>
+                        <TableCell>{t('orders.table.quantity')}</TableCell>
+                        <TableCell>{t('orders.table.unitPrice')}</TableCell>
+                        <TableCell>{t('orders.table.discount')}</TableCell>
+                        <TableCell align="right">{t('orders.table.total')}</TableCell>
+                        <TableCell align="right">{t('orders.table.actions')}</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -2232,124 +2320,81 @@ const Orders = () => {
                         ))
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={6} align="center">No items added</TableCell>
+                          <TableCell colSpan={6} align="center">{t('orders.messages.noItems')}</TableCell>
                         </TableRow>
                       )}
                       {formData.items && formData.items.length > 0 && (
+                        <>
                         <TableRow>
-                          <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>Subtotal:</TableCell>
+                            <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>{t('orders.table.subtotal')}:</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 'bold' }}>
                             {calculateOrderTotal(formData.items).toFixed(2)}
                           </TableCell>
                           <TableCell></TableCell>
                         </TableRow>
-                      )}
                       <TableRow>
-                        <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>Tax ({formData.taxRate || 0}%):</TableCell>
+                            <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>
+                              {t('orders.table.taxWithRate', { rate: formData.taxRate || 0 })}:
+                            </TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>
                           {(calculateOrderTotal(formData.items) * (parseFloat(formData.taxRate || 0) / 100)).toFixed(2)}
                         </TableCell>
                         <TableCell></TableCell>
                       </TableRow>
                       <TableRow>
-                        <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>Shipping Cost:</TableCell>
+                            <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold' }}>{t('orders.table.shippingCost')}:</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>
                           {parseFloat(formData.shippingCost || 0).toFixed(2)}
                         </TableCell>
                         <TableCell></TableCell>
                       </TableRow>
                       <TableRow>
-                        <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold', fontSize: '1.1em' }}>Grand Total:</TableCell>
+                            <TableCell colSpan={4} align="right" sx={{ fontWeight: 'bold', fontSize: '1.1em' }}>{t('orders.table.grandTotal')}:</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '1.1em', color: 'primary.main' }}>
-                          {getOrderGrandTotal().toFixed(2)} {formData.currency || 'USD'}
+                              {(
+                                calculateOrderTotal(formData.items) + 
+                                (calculateOrderTotal(formData.items) * (parseFloat(formData.taxRate || 0) / 100)) + 
+                                parseFloat(formData.shippingCost || 0)
+                              ).toFixed(2)}
                         </TableCell>
                         <TableCell></TableCell>
                       </TableRow>
+                        </>
+                      )}
                     </TableBody>
                   </Table>
                 </TableContainer>
-              </Grid>
-              
-              {/* Shipping Information Section */}
-              <Typography variant="h6" sx={{ mt: 3, mb: 2 }}>Shipping Information</Typography>
-              <Grid container spacing={2} sx={{ mb: 2 }}>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Shipping Address"
-                    variant="outlined"
-                    multiline
-                    rows={3}
-                    name="shippingAddress"
-                    value={formData.shippingAddress || ''}
-                    onChange={handleInputChange}
-                  />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    label="Shipping Method"
-                    variant="outlined"
-                    name="shippingMethod"
-                    value={formData.shippingMethod || ''}
-                    onChange={handleInputChange}
-                  />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    label="Tracking Number"
-                    variant="outlined"
-                    name="trackingNumber"
-                    value={formData.trackingNumber || ''}
-                    onChange={handleInputChange}
-                  />
-                </Grid>
               </Grid>
             </Grid>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button 
-            onClick={handleSubmit} 
-            variant="contained" 
-            color="primary"
-            disabled={loading || !formData.customerId || (formData.items && formData.items.length === 0)}
-          >
-            {isEditing ? 'Update' : 'Create'}
+          <Button onClick={handleCloseDialog}>{t('common.cancel')}</Button>
+          <Button onClick={handleSubmit} variant="contained" color="primary">
+            {isEditing ? t('common.update') : t('common.create')}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Add Item Dialog */}
       <Dialog open={openItemDialog} onClose={handleCloseItemDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Order Item</DialogTitle>
+        <DialogTitle>{t('orders.dialog.addItem')}</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12}>
               <TextField
                 name="productId"
-                label="Product"
+                label={t('orders.form.product')}
                 select
                 value={itemFormData.productId}
                 onChange={handleItemInputChange}
                 fullWidth
                 required
               >
-                <MenuItem value="">Select a product</MenuItem>
+                <MenuItem value="">{t('orders.form.selectProduct')}</MenuItem>
                 {products.map((product) => (
                   <MenuItem key={product.id} value={product.id.toString()}>
-                    {product.name} - {product.unitPrice.toFixed(2)} {product.currency}
-                    <Box component="span" sx={{ 
-                      ml: 1, 
-                      color: product.stockQuantity <= 0 ? 'error.main' : 
-                             product.stockQuantity < 5 ? 'warning.main' : 'success.main',
-                      fontWeight: 'bold',
-                      fontSize: '0.8rem'
-                    }}>
-                      (Stock: {product.stockQuantity || 0})
-                    </Box>
+                    {product.name}
                   </MenuItem>
                 ))}
               </TextField>
@@ -2357,122 +2402,102 @@ const Orders = () => {
             <Grid item xs={12} sm={6}>
               <TextField
                 name="quantity"
-                label="Quantity"
+                label={t('orders.form.quantity')}
                 type="number"
                 value={itemFormData.quantity}
                 onChange={handleItemInputChange}
                 fullWidth
                 required
-                error={itemFormData.productId && parseInt(itemFormData.quantity) > (itemFormData.availableStock || 0)}
-                helperText={itemFormData.productId && parseInt(itemFormData.quantity) > (itemFormData.availableStock || 0) 
-                  ? `Only ${itemFormData.availableStock || 0} units available` 
-                  : ''}
-                InputProps={{ 
-                  inputProps: { min: 1 },
-                  endAdornment: itemFormData.productId && (
-                    <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary', mr: 1 }}>
-                      Available: {itemFormData.availableStock || 0}
-                    </Box>
-                  )
-                }}
+                InputProps={{ inputProps: { min: 1 } }}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 name="unitPrice"
-                label="Unit Price"
+                label={t('orders.form.unitPrice')}
                 type="number"
                 value={itemFormData.unitPrice}
                 onChange={handleItemInputChange}
                 fullWidth
                 required
-                InputProps={{ inputProps: { min: 0, step: 0.01 } }}
+                InputProps={{ 
+                  inputProps: { min: 0, step: 0.01 },
+                  startAdornment: <InputAdornment position="start">$</InputAdornment>
+                }}
               />
             </Grid>
             <Grid item xs={12}>
               <TextField
                 name="discount"
-                label="Discount (%)"
+                label={t('orders.form.discount')}
                 type="number"
                 value={itemFormData.discount}
                 onChange={handleItemInputChange}
                 fullWidth
-                InputProps={{ inputProps: { min: 0, max: 100 } }}
+                InputProps={{ 
+                  inputProps: { min: 0, max: 100, step: 1 },
+                  endAdornment: <InputAdornment position="end">%</InputAdornment>
+                }}
               />
             </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseItemDialog}>Cancel</Button>
-          <Button 
-            onClick={handleAddItem} 
-            variant="contained" 
-            color="primary"
-            disabled={
-              !itemFormData.productId || 
-              itemFormData.quantity < 1 || 
-              parseInt(itemFormData.quantity) > (itemFormData.availableStock || 0) ||
-              (itemFormData.availableStock || 0) <= 0
-            }
-          >
-            Add
+          <Button onClick={handleCloseItemDialog}>{t('common.cancel')}</Button>
+          <Button onClick={handleAddItem} color="primary" variant="contained">
+            {t('common.add')}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Remove Item Confirmation Dialog */}
       <Dialog open={openRemoveItemDialog} onClose={() => setOpenRemoveItemDialog(false)}>
-        <DialogTitle>Remove Item</DialogTitle>
+        <DialogTitle>{t('orders.dialog.confirmRemoveItem')}</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to remove this item from the order?
+            {t('orders.dialog.removeItemWarning')}
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenRemoveItemDialog(false)}>Cancel</Button>
+          <Button onClick={() => setOpenRemoveItemDialog(false)}>{t('common.cancel')}</Button>
           <Button onClick={handleRemoveItemConfirm} color="error" variant="contained">
-            Remove
+            {t('common.remove')}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Delete Order Confirmation Dialog */}
+      {/* Delete Confirmation Dialog */}
       <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
-        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogTitle>{t('orders.dialog.confirmDelete')}</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete order #{orderToDelete?.orderNumber}?
-            This action cannot be undone.
+            {t('orders.dialog.deleteWarning', { 
+              number: orderToDelete?.orderNumber || t('orders.unknownOrder')
+            })}
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDeleteDialog(false)}>Cancel</Button>
+          <Button onClick={() => setOpenDeleteDialog(false)}>{t('common.cancel')}</Button>
           <Button onClick={handleDeleteConfirm} color="error" variant="contained">
-            Delete
+            {t('common.delete')}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Create Invoice Confirmation Dialog */}
       <Dialog open={openInvoiceDialog} onClose={() => setOpenInvoiceDialog(false)}>
-        <DialogTitle>Create Invoice</DialogTitle>
+        <DialogTitle>{t('orders.dialog.confirmCreateInvoice')}</DialogTitle>
         <DialogContent>
-          <Typography gutterBottom>
-            Are you sure you want to create an invoice from order #{orderForInvoice?.orderNumber}?
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            This will create a new invoice with all items and financial details from this order.
+          <Typography>
+            {t('orders.dialog.createInvoiceWarning', { 
+              number: orderForInvoice?.orderNumber || t('orders.unknownOrder')
+            })}
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenInvoiceDialog(false)}>Cancel</Button>
-          <Button 
-            onClick={handleCreateInvoiceConfirm} 
-            color="primary" 
-            variant="contained"
-            disabled={loading}
-          >
-            {loading ? <CircularProgress size={24} /> : 'Create Invoice'}
+          <Button onClick={() => setOpenInvoiceDialog(false)}>{t('common.cancel')}</Button>
+          <Button onClick={handleCreateInvoiceConfirm} color="primary" variant="contained">
+            {t('orders.actions.createInvoice')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -2484,7 +2509,7 @@ const Orders = () => {
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
-        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity}>
           {snackbar.message}
         </Alert>
       </Snackbar>

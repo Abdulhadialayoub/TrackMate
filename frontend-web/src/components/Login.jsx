@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { 
   Box, 
   TextField, 
@@ -19,6 +20,7 @@ import { useAppContext } from '../context/AppContext';
 
 const Login = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { login, isAuthenticated: contextIsAuthenticated } = useAppContext();
   const [formData, setFormData] = useState({
     username: '',
@@ -55,11 +57,11 @@ const Login = () => {
     const newErrors = {};
     
     if (!formData.username) {
-      newErrors.username = 'Email or username is required';
+      newErrors.username = t('emailRequired', 'Email or username is required');
     }
     
     if (!formData.password) {
-      newErrors.password = 'Password is required';
+      newErrors.password = t('passwordRequired', 'Password is required');
     }
     
     setErrors(newErrors);
@@ -86,10 +88,10 @@ const Login = () => {
         console.log('Login successful via context, redirecting to dashboard');
         navigate('/dashboard');
       } else {
-        setApiError(result.message || 'Login failed');
+        setApiError(result.message || t('loginFailed', 'Login failed'));
       }
     } catch (error) {
-      setApiError('An unexpected error occurred during login attempt.');
+      setApiError(t('unexpectedError', 'An unexpected error occurred during login attempt.'));
       console.error('Login component error:', error);
     } finally {
       setLoading(false);
@@ -135,7 +137,7 @@ const Login = () => {
                   TrackMate
                 </Typography>
                 <Typography variant="subtitle1" color="text.secondary">
-                  Sign in to your account to continue
+                  {t('signInToContinue', 'Sign in to your account to continue')}
                 </Typography>
               </Box>
               
@@ -151,7 +153,7 @@ const Login = () => {
                   required
                   fullWidth
                   id="username"
-                  label="Email or Username"
+                  label={t('emailOrUsername', 'Email or Username')}
                   name="username"
                   autoComplete="email"
                   autoFocus
@@ -168,7 +170,7 @@ const Login = () => {
                   required
                   fullWidth
                   name="password"
-                  label="Password"
+                  label={t('password', 'Password')}
                   type={showPassword ? 'text' : 'password'}
                   id="password"
                   autoComplete="current-password"
@@ -180,7 +182,7 @@ const Login = () => {
                     endAdornment: (
                       <InputAdornment position="end">
                         <IconButton
-                          aria-label="toggle password visibility"
+                          aria-label={t('togglePasswordVisibility', 'toggle password visibility')}
                           onClick={handleTogglePasswordVisibility}
                           edge="end"
                         >
@@ -190,8 +192,6 @@ const Login = () => {
                     ),
                   }}
                 />
-                
-                
                 
                 <Button
                   type="submit"
@@ -210,17 +210,17 @@ const Login = () => {
                   {loading ? (
                     <CircularProgress size={24} color="inherit" />
                   ) : (
-                    'Sign In'
+                    t('signIn', 'Sign In')
                   )}
                 </Button>
                 
                 <Divider sx={{ my: 2 }}>
-                  <Typography variant="body2" color="text.secondary">OR</Typography>
+                  <Typography variant="body2" color="text.secondary">{t('or', 'OR')}</Typography>
                 </Divider>
                 
                 <Box sx={{ mt: 2, textAlign: 'center' }}>
                   <Typography variant="body1">
-                    Don't have an account?{' '}
+                    {t('dontHaveAccount', "Don't have an account?")}{' '}
                     <Link 
                       to="/register" 
                       style={{ 
@@ -229,7 +229,7 @@ const Login = () => {
                         fontWeight: 'bold' 
                       }}
                     >
-                      Sign Up
+                      {t('signUp', 'Sign Up')}
                     </Link>
                   </Typography>
                 </Box>
