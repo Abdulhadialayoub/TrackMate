@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   Box, 
   Button, 
@@ -38,13 +39,6 @@ import {
 import { productService } from '../services/productService';
 import { categoryService } from '../services/categoryService';
 
-const productStatuses = [
-  { value: 0, label: 'Active', color: 'success' },
-  { value: 1, label: 'Inactive', color: 'error' },
-  { value: 2, label: 'Discontinued', color: 'warning' },
-  { value: 3, label: 'OutOfStock', color: 'default' }
-];
-
 const initialFormState = {
   name: '',
   description: '',
@@ -64,6 +58,7 @@ const initialFormState = {
 };
 
 const Products = () => {
+  const { t } = useTranslation();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -80,6 +75,13 @@ const Products = () => {
   const [openStockDialog, setOpenStockDialog] = useState(false);
   const [stockData, setStockData] = useState({ id: null, quantity: 0 });
 
+  const productStatuses = [
+    { value: 0, label: t('products.status.active'), color: 'success' },
+    { value: 1, label: t('products.status.inactive'), color: 'error' },
+    { value: 2, label: t('products.status.discontinued'), color: 'warning' },
+    { value: 3, label: t('products.status.outOfStock'), color: 'default' }
+  ];
+
   useEffect(() => {
     fetchProducts();
     fetchCategories();
@@ -91,14 +93,11 @@ const Products = () => {
       const companyId = localStorage.getItem('company_id');
       let result;
       
-      // Get user role to determine which API to call
       const userRole = localStorage.getItem('user_role');
       
       if (userRole === 'Dev') {
-        // Dev role can see all products
         result = await productService.getAll();
       } else {
-        // Other roles (including Admin) can only see their company's products
         result = await productService.getByCompanyId(companyId);
       }
       
@@ -108,13 +107,13 @@ const Products = () => {
       } else {
         setError(result.message);
         setProducts([]);
-        showSnackbar(result.message, 'error');
+        showSnackbar('fetchError', 'error');
       }
     } catch (err) {
       console.error('Error fetching products:', err);
-      setError('Failed to fetch products');
+      setError(t('products.messages.fetchError'));
       setProducts([]);
-      showSnackbar('Failed to fetch products', 'error');
+      showSnackbar('fetchError', 'error');
     } finally {
       setLoading(false);
     }
@@ -148,7 +147,6 @@ const Products = () => {
 
   const handleOpenDialog = (product = null) => {
     if (product) {
-      // Check if user has permission to edit this product
       const companyId = parseInt(localStorage.getItem('company_id') || '1');
       const userRole = localStorage.getItem('user_role');
       
@@ -189,7 +187,7 @@ const Products = () => {
   const handleSubmit = async () => {
     try {
       if (!formData.category) {
-        showSnackbar('Please select a category.', 'error');
+        showSnackbar('categoryRequired', 'error');
         return;
       }
       
@@ -214,10 +212,8 @@ const Products = () => {
       let result;
       
       if (isEditing) {
-        // For updating, ensure we're updating a product that belongs to the user's company
-        // Check if the product's company ID matches the user's company ID
         if (formData.companyId && formData.companyId !== companyId && localStorage.getItem('user_role') !== 'Dev') {
-          showSnackbar('You can only edit products that belong to your company', 'error');
+          showSnackbar('permissionError', 'error', { action: t('products.actions.edit').toLowerCase() });
           return;
         }
         result = await productService.update(formData.id, payload);
@@ -226,14 +222,14 @@ const Products = () => {
       }
       
       if (result.success) {
-        showSnackbar(`Product ${isEditing ? 'updated' : 'created'} successfully`, 'success');
+        showSnackbar(isEditing ? 'updateSuccess' : 'createSuccess', 'success');
         handleCloseDialog();
         fetchProducts();
       } else {
-        showSnackbar(result.message, 'error');
+        showSnackbar(isEditing ? 'updateError' : 'createError', 'error');
       }
     } catch (err) {
-      showSnackbar(`Failed to ${isEditing ? 'update' : 'create'} product`, 'error');
+      showSnackbar(isEditing ? 'updateError' : 'createError', 'error');
     }
   };
 
@@ -246,12 +242,11 @@ const Products = () => {
     if (!productToDelete) return;
     
     try {
-      // Check if user has permission to delete this product
       const companyId = parseInt(localStorage.getItem('company_id') || '1');
       const userRole = localStorage.getItem('user_role');
       
       if (productToDelete.companyId !== companyId && userRole !== 'Dev') {
-        showSnackbar('You can only delete products that belong to your company', 'error');
+        showSnackbar('permissionError', 'error', { action: t('products.actions.delete').toLowerCase() });
         setOpenDeleteDialog(false);
         setProductToDelete(null);
         return;
@@ -259,13 +254,13 @@ const Products = () => {
       
       const result = await productService.delete(productToDelete.id);
       if (result.success) {
-        showSnackbar('Product deleted successfully', 'success');
+        showSnackbar('deleteSuccess', 'success');
         fetchProducts();
       } else {
-        showSnackbar(result.message, 'error');
+        showSnackbar('deleteError', 'error');
       }
     } catch (err) {
-      showSnackbar('Failed to delete product', 'error');
+      showSnackbar('deleteError', 'error');
     } finally {
       setOpenDeleteDialog(false);
       setProductToDelete(null);
@@ -279,34 +274,36 @@ const Products = () => {
 
   const handleStockUpdate = async () => {
     try {
-      // Check if user has permission to update this product's stock
       const companyId = parseInt(localStorage.getItem('company_id') || '1');
       const userRole = localStorage.getItem('user_role');
       
-      // Find the product to check its company ID
       const product = products.find(p => p.id === stockData.id);
       
       if (product && product.companyId !== companyId && userRole !== 'Dev') {
-        showSnackbar('You can only update stock for products that belong to your company', 'error');
+        showSnackbar('permissionError', 'error', { action: t('products.actions.updateStock').toLowerCase() });
         setOpenStockDialog(false);
         return;
       }
       
       const result = await productService.updateStock(stockData.id, stockData.quantity);
       if (result.success) {
-        showSnackbar('Stock updated successfully', 'success');
+        showSnackbar('stockUpdateSuccess', 'success');
         fetchProducts();
         setOpenStockDialog(false);
       } else {
-        showSnackbar(result.message, 'error');
+        showSnackbar('stockUpdateError', 'error');
       }
     } catch (err) {
-      showSnackbar('Failed to update stock', 'error');
+      showSnackbar('stockUpdateError', 'error');
     }
   };
 
-  const showSnackbar = (message, severity = 'info') => {
-    setSnackbar({ open: true, message, severity });
+  const showSnackbar = (messageKey, severity = 'info', params = {}) => {
+    setSnackbar({ 
+      open: true, 
+      message: t(`products.messages.${messageKey}`, params), 
+      severity 
+    });
   };
 
   const handleCloseSnackbar = () => {
@@ -339,7 +336,7 @@ const Products = () => {
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" component="h1" gutterBottom>
-          Products Management
+          {t('products.management')}
         </Typography>
         <Button 
           variant="contained" 
@@ -347,7 +344,7 @@ const Products = () => {
           startIcon={<AddIcon />}
           onClick={() => handleOpenDialog()}
         >
-          Add Product
+          {t('products.addProduct')}
         </Button>
       </Box>
 
@@ -355,7 +352,7 @@ const Products = () => {
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
           <TextField
             variant="outlined"
-            placeholder="Search products..."
+            placeholder={t('products.searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             size="small"
@@ -368,7 +365,7 @@ const Products = () => {
               ),
             }}
           />
-          <Tooltip title="Refresh">
+          <Tooltip title={t('products.refreshTooltip')}>
             <IconButton onClick={fetchProducts}>
               <RefreshIcon />
             </IconButton>
@@ -386,13 +383,13 @@ const Products = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Code</TableCell>
-              <TableCell></TableCell>
-              <TableCell>Price</TableCell>
-              <TableCell>Stock</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell align="right">Actions</TableCell>
+              <TableCell>{t('products.table.name')}</TableCell>
+              <TableCell>{t('products.table.code')}</TableCell>
+              <TableCell>{t('products.table.category')}</TableCell>
+              <TableCell>{t('products.table.price')}</TableCell>
+              <TableCell>{t('products.table.stock')}</TableCell>
+              <TableCell>{t('products.table.status')}</TableCell>
+              <TableCell align="right">{t('products.table.actions')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -405,7 +402,7 @@ const Products = () => {
             ) : filteredProducts.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} align="center">
-                  No products found
+                  {t('products.noProductsFound')}
                 </TableCell>
               </TableRow>
             ) : (
@@ -422,7 +419,7 @@ const Products = () => {
                     <TableCell>{product.stockQuantity}</TableCell>
                     <TableCell>{getStatusChip(product.status)}</TableCell>
                     <TableCell align="right">
-                      <Tooltip title="Update Stock">
+                      <Tooltip title={t('products.actions.updateStock')}>
                         <IconButton 
                           size="small" 
                           onClick={() => handleStockClick(product)}
@@ -431,7 +428,7 @@ const Products = () => {
                           <InventoryIcon />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Edit">
+                      <Tooltip title={t('products.actions.edit')}>
                         <IconButton 
                           size="small" 
                           onClick={() => handleOpenDialog(product)}
@@ -440,7 +437,7 @@ const Products = () => {
                           <EditIcon />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Delete">
+                      <Tooltip title={t('products.actions.delete')}>
                         <IconButton 
                           size="small" 
                           onClick={() => handleDeleteClick(product)}
@@ -467,13 +464,15 @@ const Products = () => {
       </TableContainer>
 
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
-        <DialogTitle>{isEditing ? 'Edit Product' : 'Add New Product'}</DialogTitle>
+        <DialogTitle>
+          {isEditing ? t('products.editProduct') : t('products.addNewProduct')}
+        </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12} sm={6}>
               <TextField
                 name="name"
-                label="Product Name"
+                label={t('products.form.name')}
                 value={formData.name}
                 onChange={handleInputChange}
                 fullWidth
@@ -483,7 +482,7 @@ const Products = () => {
             <Grid item xs={12} sm={6}>
               <TextField
                 name="code"
-                label="Product Code"
+                label={t('products.form.code')}
                 value={formData.code}
                 onChange={handleInputChange}
                 fullWidth
@@ -493,7 +492,7 @@ const Products = () => {
             <Grid item xs={12}>
               <TextField
                 name="description"
-                label="Description"
+                label={t('products.form.description')}
                 value={formData.description}
                 onChange={handleInputChange}
                 fullWidth
@@ -505,14 +504,14 @@ const Products = () => {
               <TextField
                 select
                 name="category"
-                label="Category"
+                label={t('products.form.category')}
                 value={formData.category}
                 onChange={handleInputChange}
                 fullWidth
                 required
               >
                 <MenuItem value="" disabled>
-                  Select a Category
+                  {t('products.form.selectCategory')}
                 </MenuItem>
                 {categories.map((cat) => (
                   <MenuItem key={cat.id} value={cat.id.toString()}>
@@ -524,7 +523,7 @@ const Products = () => {
             <Grid item xs={12} sm={6}>
               <TextField
                 name="brand"
-                label="Brand"
+                label={t('products.form.brand')}
                 value={formData.brand}
                 onChange={handleInputChange}
                 fullWidth
@@ -533,7 +532,7 @@ const Products = () => {
             <Grid item xs={12} sm={4}>
               <TextField
                 name="unitPrice"
-                label="Unit Price"
+                label={t('products.form.unitPrice')}
                 type="number"
                 value={formData.unitPrice}
                 onChange={handleInputChange}
@@ -547,7 +546,7 @@ const Products = () => {
             <Grid item xs={12} sm={4}>
               <TextField
                 name="currency"
-                label="Currency"
+                label={t('products.form.currency')}
                 select
                 value={formData.currency}
                 onChange={handleInputChange}
@@ -562,7 +561,7 @@ const Products = () => {
             <Grid item xs={12} sm={4}>
               <TextField
                 name="unit"
-                label="Unit (e.g., kg, pcs)"
+                label={t('products.form.unit')}
                 value={formData.unit}
                 onChange={handleInputChange}
                 fullWidth
@@ -571,7 +570,7 @@ const Products = () => {
             <Grid item xs={12} sm={4}>
               <TextField
                 name="stockQuantity"
-                label="Stock Quantity"
+                label={t('products.form.stockQuantity')}
                 type="number"
                 value={formData.stockQuantity}
                 onChange={handleInputChange}
@@ -582,7 +581,7 @@ const Products = () => {
             <Grid item xs={12} sm={4}>
               <TextField
                 name="weight"
-                label="Weight"
+                label={t('products.form.weight')}
                 type="number"
                 value={formData.weight}
                 onChange={handleInputChange}
@@ -592,7 +591,7 @@ const Products = () => {
             <Grid item xs={12} sm={4}>
               <TextField
                 name="sku"
-                label="SKU"
+                label={t('products.form.sku')}
                 value={formData.sku}
                 onChange={handleInputChange}
                 fullWidth
@@ -601,7 +600,7 @@ const Products = () => {
             <Grid item xs={12} sm={6}>
               <TextField
                 name="model"
-                label="Model"
+                label={t('products.form.model')}
                 value={formData.model}
                 onChange={handleInputChange}
                 fullWidth
@@ -610,7 +609,7 @@ const Products = () => {
             <Grid item xs={12} sm={6}>
               <TextField
                 name="status"
-                label="Status"
+                label={t('products.form.status')}
                 select
                 value={formData.status}
                 onChange={handleInputChange}
@@ -626,40 +625,43 @@ const Products = () => {
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button onClick={handleCloseDialog}>
+            {t('products.actions.cancel')}
+          </Button>
           <Button 
             onClick={handleSubmit} 
             variant="contained" 
             color="primary"
           >
-            {isEditing ? 'Update' : 'Create'}
+            {isEditing ? t('products.actions.update') : t('products.actions.create')}
           </Button>
         </DialogActions>
       </Dialog>
 
       <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
-        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogTitle>{t('products.deleteConfirmation.title')}</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete the product "{productToDelete?.name}"?
-            This action cannot be undone.
+            {t('products.deleteConfirmation.message', { name: productToDelete?.name })}
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDeleteDialog(false)}>Cancel</Button>
+          <Button onClick={() => setOpenDeleteDialog(false)}>
+            {t('products.actions.cancel')}
+          </Button>
           <Button onClick={handleDeleteConfirm} color="error" variant="contained">
-            Delete
+            {t('products.actions.delete')}
           </Button>
         </DialogActions>
       </Dialog>
 
       <Dialog open={openStockDialog} onClose={() => setOpenStockDialog(false)}>
-        <DialogTitle>Update Stock</DialogTitle>
+        <DialogTitle>{t('products.stockDialog.title')}</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
             margin="dense"
-            label="Stock Quantity"
+            label={t('products.stockDialog.quantity')}
             type="number"
             fullWidth
             value={stockData.quantity}
@@ -668,9 +670,11 @@ const Products = () => {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenStockDialog(false)}>Cancel</Button>
+          <Button onClick={() => setOpenStockDialog(false)}>
+            {t('products.actions.cancel')}
+          </Button>
           <Button onClick={handleStockUpdate} color="primary" variant="contained">
-            Update
+            {t('products.actions.update')}
           </Button>
         </DialogActions>
       </Dialog>

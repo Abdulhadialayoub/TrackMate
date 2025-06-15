@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   Box, 
   Paper, 
@@ -25,29 +26,41 @@ import {
 } from '@mui/icons-material';
 
 const mockData = [
-  { id: 1, customer: "Acme Inc.", product: "Software License", amount: "$1,200", status: "Completed", date: "2023-10-15" },
-  { id: 2, customer: "TechCorp", product: "Cloud Services", amount: "$850", status: "Pending", date: "2023-10-16" },
-  { id: 3, customer: "GlobalTrade", product: "Consulting", amount: "$3,400", status: "Completed", date: "2023-10-14" },
-  { id: 4, customer: "InnovateTech", product: "Hardware", amount: "$760", status: "Processing", date: "2023-10-16" },
-  { id: 5, customer: "FutureWorks", product: "Support Plan", amount: "$1,500", status: "Completed", date: "2023-10-13" },
+  { id: 1, customer: "Acme Ltd.", product: "Yazılım Lisansı", amount: 1200, status: "Tamamlandı", date: "2023-10-15" },
+  { id: 2, customer: "TechCorp", product: "Bulut Hizmetleri", amount: 850, status: "Beklemede", date: "2023-10-16" },
+  { id: 3, customer: "GlobalTrade", product: "Danışmanlık", amount: 3400, status: "Tamamlandı", date: "2023-10-14" },
+  { id: 4, customer: "InnovateTech", product: "Donanım", amount: 760, status: "İşleniyor", date: "2023-10-16" },
+  { id: 5, customer: "FutureWorks", product: "Destek Planı", amount: 1500, status: "Tamamlandı", date: "2023-10-13" },
 ];
 
 const getStatusColor = (status) => {
   switch(status) {
-    case 'Completed': return 'success';
-    case 'Pending': return 'warning';
-    case 'Processing': return 'info';
+    case 'Tamamlandı': return 'success';
+    case 'Beklemede': return 'warning';
+    case 'İşleniyor': return 'info';
     default: return 'default';
   }
 };
 
 const DashboardPlaceholder = () => {
+  const { t } = useTranslation();
+
+  const formatCurrency = (amount) => {
+    return t('dashboard.stats.currency', { amount: amount.toLocaleString() });
+  };
+
+  const formatPercentage = (value) => {
+    return value >= 0 
+      ? t('dashboard.stats.increase', { amount: Math.abs(value) })
+      : t('dashboard.stats.decrease', { amount: Math.abs(value) });
+  };
+
   return (
     <Box sx={{ p: 3, bgcolor: '#f5f7fa', borderRadius: 3, boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
       {/* Dashboard Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h6" fontWeight="bold" color="black" >Dashboard Overview</Typography>
-        <Chip label="Today: June 16, 2025" size="small" color="primary" />
+        <Typography variant="h6" fontWeight="bold" color="black">{t('dashboard.systemDashboard')}</Typography>
+        <Chip label={t('dashboard.today', { date: '16 Haziran 2025' })} size="small" color="primary" />
       </Box>
 
       {/* Stats Cards */}
@@ -57,11 +70,11 @@ const DashboardPlaceholder = () => {
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Box>
-                  <Typography color="primary" variant="subtitle2">Sales</Typography>
-                  <Typography variant="h6" fontWeight="bold">$12,850</Typography>
+                  <Typography color="primary" variant="subtitle2">{t('dashboard.stats.sales')}</Typography>
+                  <Typography variant="h6" fontWeight="bold">{formatCurrency(12850)}</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <TrendingUp sx={{ color: 'success.main', fontSize: 16, mr: 0.5 }} />
-                    <Typography variant="caption" color="success.main">+12.5%</Typography>
+                    <Typography variant="caption" color="success.main">{formatPercentage(12.5)}</Typography>
                   </Box>
                 </Box>
                 <AttachMoney sx={{ color: 'primary.main', opacity: 0.8, fontSize: 40 }} />
@@ -74,11 +87,11 @@ const DashboardPlaceholder = () => {
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Box>
-                  <Typography color="success.dark" variant="subtitle2">Orders</Typography>
+                  <Typography color="success.dark" variant="subtitle2">{t('dashboard.stats.orders')}</Typography>
                   <Typography variant="h6" fontWeight="bold">584</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <TrendingUp sx={{ color: 'success.main', fontSize: 16, mr: 0.5 }} />
-                    <Typography variant="caption" color="success.main">+8.2%</Typography>
+                    <Typography variant="caption" color="success.main">{formatPercentage(8.2)}</Typography>
                   </Box>
                 </Box>
                 <ShoppingCart sx={{ color: 'success.main', opacity: 0.8, fontSize: 40 }} />
@@ -91,11 +104,11 @@ const DashboardPlaceholder = () => {
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Box>
-                  <Typography color="secondary.dark" variant="subtitle2">Customers</Typography>
+                  <Typography color="secondary.dark" variant="subtitle2">{t('dashboard.stats.customers')}</Typography>
                   <Typography variant="h6" fontWeight="bold">1,253</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <TrendingUp sx={{ color: 'success.main', fontSize: 16, mr: 0.5 }} />
-                    <Typography variant="caption" color="success.main">+3.1%</Typography>
+                    <Typography variant="caption" color="success.main">{formatPercentage(3.1)}</Typography>
                   </Box>
                 </Box>
                 <Person sx={{ color: 'secondary.main', opacity: 0.8, fontSize: 40 }} />
@@ -108,11 +121,11 @@ const DashboardPlaceholder = () => {
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Box>
-                  <Typography color="error.dark" variant="subtitle2">Refunds</Typography>
-                  <Typography variant="h6" fontWeight="bold">$950</Typography>
+                  <Typography color="error.dark" variant="subtitle2">{t('dashboard.stats.refunds')}</Typography>
+                  <Typography variant="h6" fontWeight="bold">{formatCurrency(950)}</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <TrendingDown sx={{ color: 'error.main', fontSize: 16, mr: 0.5 }} />
-                    <Typography variant="caption" color="error.main">-2.4%</Typography>
+                    <Typography variant="caption" color="error.main">{formatPercentage(-2.4)}</Typography>
                   </Box>
                 </Box>
                 <Assessment sx={{ color: 'error.main', opacity: 0.8, fontSize: 40 }} />
@@ -124,7 +137,7 @@ const DashboardPlaceholder = () => {
 
       {/* Activity Progress */}
       <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle2" gutterBottom color="black">Monthly Goal</Typography>
+        <Typography variant="subtitle2" gutterBottom color="black">{t('dashboard.monthlyGoal')}</Typography>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Box sx={{ flexGrow: 1, mr: 1 }}>
             <LinearProgress variant="determinate" value={68} sx={{ height: 8, borderRadius: 5 }} />
@@ -135,17 +148,17 @@ const DashboardPlaceholder = () => {
 
       {/* Table */}
       <Paper sx={{ width: '100%', overflow: 'hidden' }}>
-        <Typography variant="subtitle1" sx={{ p: 2, pb: 0 }} fontWeight="medium">Recent Transactions</Typography>
+        <Typography variant="subtitle1" sx={{ p: 2, pb: 0 }} fontWeight="medium">{t('dashboard.recentOrders')}</Typography>
         <TableContainer sx={{ maxHeight: 240 }}>
           <Table stickyHeader size="small">
             <TableHead>
               <TableRow>
                 <TableCell>ID</TableCell>
-                <TableCell>Customer</TableCell>
-                <TableCell>Product</TableCell>
-                <TableCell align="right">Amount</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Date</TableCell>
+                <TableCell>{t('customer')}</TableCell>
+                <TableCell>{t('product')}</TableCell>
+                <TableCell align="right">{t('total')}</TableCell>
+                <TableCell>{t('status')}</TableCell>
+                <TableCell>{t('date')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -154,7 +167,7 @@ const DashboardPlaceholder = () => {
                   <TableCell>#{row.id}</TableCell>
                   <TableCell>{row.customer}</TableCell>
                   <TableCell>{row.product}</TableCell>
-                  <TableCell align="right">{row.amount}</TableCell>
+                  <TableCell align="right">{formatCurrency(row.amount)}</TableCell>
                   <TableCell>
                     <Chip 
                       label={row.status} 

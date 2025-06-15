@@ -132,10 +132,6 @@ export const AppProvider = ({ children }) => {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      setIsAuthenticated(false);
-      setUser(null);
-      setUserRole('');
-      setCompanyId(null);
       // Clear all user data from storage
       localStorage.removeItem('company_id');
       localStorage.removeItem('token');

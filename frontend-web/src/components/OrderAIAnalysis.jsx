@@ -16,6 +16,7 @@ import { aiService } from '../services/aiService';
 import { orderService } from '../services/orderService';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { getStatusName, getStatusColor } from '../utils/orderUtils';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Component for analyzing orders with AI and displaying recommendations
@@ -29,6 +30,7 @@ const OrderAIAnalysis = ({ orderData: propOrderData, onAnalysisComplete }) => {
   const [error, setError] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [orderData, setOrderData] = useState(propOrderData || null);
+  const { t } = useTranslation();
 
   const { orderId } = useParams(); // Get orderId from URL parameters
   const navigate = useNavigate();
@@ -45,11 +47,11 @@ const OrderAIAnalysis = ({ orderData: propOrderData, onAnalysisComplete }) => {
           if (result.success) {
             setOrderData(result.data);
           } else {
-            setError(`Failed to load order #${orderId}: ${result.message}`);
+            setError(t('orders.aiAnalysis.error.failedToAnalyze'));
           }
         } catch (err) {
           console.error('Error fetching order:', err);
-          setError(`Error loading order #${orderId}`);
+          setError(t('orders.aiAnalysis.error.unexpectedError'));
         } finally {
           setOrderLoading(false);
         }
@@ -57,11 +59,11 @@ const OrderAIAnalysis = ({ orderData: propOrderData, onAnalysisComplete }) => {
 
       fetchOrderData();
     }
-  }, [orderId, orderData]);
+  }, [orderId, orderData, t]);
 
   const handleAnalyzeOrder = async () => {
     if (!orderData || !orderData.id) {
-      setError('No valid order data to analyze');
+      setError(t('orders.aiAnalysis.error.noValidOrder'));
       return;
     }
     
@@ -77,11 +79,11 @@ const OrderAIAnalysis = ({ orderData: propOrderData, onAnalysisComplete }) => {
           onAnalysisComplete(result.data.comment);
         }
       } else {
-        setError(result.message || 'Failed to analyze order');
+        setError(result.message || t('orders.aiAnalysis.error.failedToAnalyze'));
       }
     } catch (err) {
       console.error('Error in AI analysis:', err);
-      setError('An unexpected error occurred during analysis');
+      setError(t('orders.aiAnalysis.error.unexpectedError'));
     } finally {
       setLoading(false);
     }
@@ -98,7 +100,7 @@ const OrderAIAnalysis = ({ orderData: propOrderData, onAnalysisComplete }) => {
         <Paper sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <CircularProgress size={40} />
           <Typography variant="h6" sx={{ mt: 2 }}>
-            Loading order data...
+            {t('orders.aiAnalysis.loading')}
           </Typography>
         </Paper>
       </Container>
@@ -113,12 +115,12 @@ const OrderAIAnalysis = ({ orderData: propOrderData, onAnalysisComplete }) => {
             <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Box>
                 <Typography variant="h4" component="h1">
-                  AI Order Analysis
+                  {t('orders.aiAnalysis.title')}
                 </Typography>
                 {orderData && (
                   <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
                     <Typography variant="subtitle1" color="text.secondary" sx={{ mr: 1 }}>
-                      Order #{orderData.orderNumber}
+                      {t('orders.table.orderNumber', { number: orderData.orderNumber })}
                     </Typography>
                     <Chip 
                       label={getStatusName(orderData.status)} 
@@ -134,14 +136,14 @@ const OrderAIAnalysis = ({ orderData: propOrderData, onAnalysisComplete }) => {
                   startIcon={<ArrowBack />} 
                   onClick={handleBackToOrder}
                 >
-                  Back to Order
+                  {t('orders.aiAnalysis.backToOrder')}
                 </Button>
               )}
             </Box>
             
             {!orderData && !error && (
               <Alert severity="info" sx={{ mb: 2 }}>
-                No order selected. Please go back to the Orders page and select an order to analyze.
+                {t('orders.aiAnalysis.noOrderSelected')}
               </Alert>
             )}
             
@@ -154,7 +156,7 @@ const OrderAIAnalysis = ({ orderData: propOrderData, onAnalysisComplete }) => {
             {orderData && !analysis && (
               <Box sx={{ mt: 2, mb: 4, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <Typography variant="body1" sx={{ mb: 2, maxWidth: 600, textAlign: 'center' }}>
-                  Click the button below to analyze this order with AI. Our system will provide recommendations based on the order details.
+                  {t('orders.aiAnalysis.startAnalysisDescription')}
                 </Typography>
                 <Button
                   variant="contained"
@@ -165,7 +167,7 @@ const OrderAIAnalysis = ({ orderData: propOrderData, onAnalysisComplete }) => {
                   disabled={loading || !orderData}
                   sx={{ mb: 2 }}
                 >
-                  {loading ? 'Analyzing...' : 'Analyze Order'}
+                  {loading ? t('orders.aiAnalysis.analyzingButton') : t('orders.aiAnalysis.analyzeButton')}
                 </Button>
               </Box>
             )}
@@ -174,7 +176,7 @@ const OrderAIAnalysis = ({ orderData: propOrderData, onAnalysisComplete }) => {
               <Card variant="outlined" sx={{ mb: 2, backgroundColor: 'rgba(200, 250, 205, 0.2)' }}>
                 <CardContent>
                   <Typography variant="h6" gutterBottom fontWeight="bold">
-                    AI Recommendations:
+                    {t('orders.aiAnalysis.recommendations')}
                   </Typography>
                   <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
                     {analysis}
@@ -189,7 +191,7 @@ const OrderAIAnalysis = ({ orderData: propOrderData, onAnalysisComplete }) => {
       {!isStandalone && (
         <>
           <Typography variant="h6" gutterBottom>
-            AI Order Analysis
+            {t('orders.aiAnalysis.title')}
           </Typography>
           
           {error && (
@@ -207,7 +209,7 @@ const OrderAIAnalysis = ({ orderData: propOrderData, onAnalysisComplete }) => {
               disabled={loading || !orderData}
               sx={{ mb: 2 }}
             >
-              {loading ? 'Analyzing...' : 'Analyze Order'}
+              {loading ? t('orders.aiAnalysis.analyzingButton') : t('orders.aiAnalysis.analyzeButton')}
             </Button>
           )}
           
@@ -215,7 +217,7 @@ const OrderAIAnalysis = ({ orderData: propOrderData, onAnalysisComplete }) => {
             <Card variant="outlined" sx={{ mb: 2, backgroundColor: 'rgba(200, 250, 205, 0.2)' }}>
               <CardContent>
                 <Typography variant="subtitle1" gutterBottom fontWeight="bold">
-                  AI Recommendations:
+                  {t('orders.aiAnalysis.recommendations')}
                 </Typography>
                 <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
                   {analysis}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Button,
@@ -39,6 +40,7 @@ const initialFormState = {
 };
 
 const Categories = () => {
+  const { t } = useTranslation();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -51,13 +53,12 @@ const Categories = () => {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState(null);
-  const [userRole, setUserRole] = useState(null); // State to store user role
+  const [userRole, setUserRole] = useState(null);
 
   useEffect(() => {
     fetchCategories();
-    // Get user role from localStorage on mount
     const role = localStorage.getItem('user_role');
-    console.log("User Role from localStorage:", role); // Log the raw value
+    console.log("User Role from localStorage:", role);
     setUserRole(role);
   }, []);
 
@@ -71,13 +72,13 @@ const Categories = () => {
       } else {
         setError(result.message);
         setCategories([]);
-        showSnackbar(result.message, 'error');
+        showSnackbar(t('fetchCategoriesError', 'Failed to fetch categories'), 'error');
       }
     } catch (err) {
       console.error('Error fetching categories:', err);
-      setError('Failed to fetch categories');
+      setError(t('fetchCategoriesError', 'Failed to fetch categories'));
       setCategories([]);
-      showSnackbar('Failed to fetch categories', 'error');
+      showSnackbar(t('fetchCategoriesError', 'Failed to fetch categories'), 'error');
     } finally {
       setLoading(false);
     }
@@ -118,7 +119,7 @@ const Categories = () => {
     try {
       let result;
       const userId = localStorage.getItem('user_id') || 'system';
-      const companyId = parseInt(localStorage.getItem('company_id') || '1'); // Assuming companyId is needed
+      const companyId = parseInt(localStorage.getItem('company_id') || '1');
 
       if (isEditing) {
         result = await categoryService.update(formData.id, { 
@@ -128,23 +129,38 @@ const Categories = () => {
       } else {
         result = await categoryService.create({ 
           ...formData, 
-          companyId: companyId, // Add companyId for creation
+          companyId: companyId,
           createdBy: userId 
         });
       }
 
       if (result.success) {
-        showSnackbar(`Category ${isEditing ? 'updated' : 'created'} successfully`, 'success');
+        showSnackbar(
+          isEditing 
+            ? t('categoryUpdated', 'Category updated successfully')
+            : t('categoryCreated', 'Category created successfully'),
+          'success'
+        );
         handleCloseDialog();
         fetchCategories();
         setSearchTerm('');
         setPage(0);
       } else {
-        showSnackbar(result.message || `Failed to ${isEditing ? 'update' : 'create'} category`, 'error');
+        showSnackbar(
+          result.message || t('categoryActionFailed', 'Failed to {{action}} category', {
+            action: isEditing ? t('update', 'update') : t('create', 'create')
+          }),
+          'error'
+        );
       }
     } catch (err) {
       console.error(`Error ${isEditing ? 'updating' : 'creating'} category:`, err);
-      showSnackbar(`An error occurred while ${isEditing ? 'updating' : 'creating'} category.`, 'error');
+      showSnackbar(
+        t('categoryActionError', 'An error occurred while {{action}} category', {
+          action: isEditing ? t('updating', 'updating') : t('creating', 'creating')
+        }),
+        'error'
+      );
     }
   };
 
@@ -159,14 +175,14 @@ const Categories = () => {
     try {
       const result = await categoryService.delete(categoryToDelete.id);
       if (result.success) {
-        showSnackbar('Category deleted successfully', 'success');
+        showSnackbar(t('categoryDeleted', 'Category deleted successfully'), 'success');
         fetchCategories();
       } else {
-        showSnackbar(result.message || 'Failed to delete category', 'error');
+        showSnackbar(result.message || t('deleteCategoryFailed', 'Failed to delete category'), 'error');
       }
     } catch (err) {
       console.error('Error deleting category:', err);
-      showSnackbar('An error occurred while deleting category.', 'error');
+      showSnackbar(t('deleteCategoryError', 'An error occurred while deleting category'), 'error');
     } finally {
       setOpenDeleteDialog(false);
       setCategoryToDelete(null);
@@ -186,18 +202,13 @@ const Categories = () => {
     cat.description?.toLowerCase().includes(searchTerm.toLowerCase())
   ) : [];
 
-  // Check if user has permission (dev or Admin) - Case-insensitive check
   const canManageCategories = userRole?.toLowerCase() === 'dev' || userRole?.toLowerCase() === 'admin';
-
-  // Add logs before return
-  console.log("Current userRole state:", userRole);
-  console.log("Can Manage Categories?", canManageCategories);
 
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" component="h1" gutterBottom>
-          Category Management
+          {t('categoryManagement', 'Category Management')}
         </Typography>
         {canManageCategories && (
           <Button
@@ -206,7 +217,7 @@ const Categories = () => {
             startIcon={<AddIcon />}
             onClick={() => handleOpenDialog()}
           >
-            Add Category
+            {t('addCategory', 'Add Category')}
           </Button>
         )}
       </Box>
@@ -215,7 +226,7 @@ const Categories = () => {
          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
            <TextField
              variant="outlined"
-             placeholder="Search categories..."
+             placeholder={t('searchCategories', 'Search categories...')}
              value={searchTerm}
              onChange={(e) => setSearchTerm(e.target.value)}
              size="small"
@@ -228,7 +239,7 @@ const Categories = () => {
                ),
              }}
            />
-           <Tooltip title="Refresh">
+           <Tooltip title={t('refresh', 'Refresh')}>
              <IconButton onClick={fetchCategories}>
                <RefreshIcon />
              </IconButton>
@@ -246,10 +257,9 @@ const Categories = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Description</TableCell>
-              {/* Add more columns if needed, e.g., Product Count */} 
-              {canManageCategories && <TableCell align="right">Actions</TableCell>}
+              <TableCell>{t('name', 'Name')}</TableCell>
+              <TableCell>{t('description', 'Description')}</TableCell>
+              {canManageCategories && <TableCell align="right">{t('actions', 'Actions')}</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -262,7 +272,7 @@ const Categories = () => {
             ) : filteredCategories.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={canManageCategories ? 3 : 2} align="center">
-                  No categories found
+                  {t('noCategoriesFound', 'No categories found')}
                 </TableCell>
               </TableRow>
             ) : (
@@ -272,10 +282,9 @@ const Categories = () => {
                   <TableRow key={category.id}>
                     <TableCell>{category.name}</TableCell>
                     <TableCell>{category.description}</TableCell>
-                    {/* Add more cells if needed */} 
                     {canManageCategories && (
                       <TableCell align="right">
-                        <Tooltip title="Edit">
+                        <Tooltip title={t('edit', 'Edit')}>
                           <IconButton
                             size="small"
                             onClick={() => handleOpenDialog(category)}
@@ -284,7 +293,7 @@ const Categories = () => {
                             <EditIcon />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Delete">
+                        <Tooltip title={t('delete', 'Delete')}>
                           <IconButton
                             size="small"
                             onClick={() => handleDeleteClick(category)}
@@ -308,6 +317,10 @@ const Categories = () => {
           page={page}
           onPageChange={handleChangePage}
           onRowsPerPageChange={handleChangeRowsPerPage}
+          labelRowsPerPage={t('rowsPerPage', 'Rows per page:')}
+          labelDisplayedRows={({ from, to, count }) => 
+            t('paginationDisplayedRows', '{{from}}-{{to}} of {{count}}', { from, to, count })
+          }
         />
       </TableContainer>
 
@@ -319,13 +332,15 @@ const Categories = () => {
         fullWidth
         disableRestoreFocus
       >
-        <DialogTitle>{isEditing ? 'Edit Category' : 'Add New Category'}</DialogTitle>
+        <DialogTitle>
+          {isEditing ? t('editCategory', 'Edit Category') : t('addNewCategory', 'Add New Category')}
+        </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12}>
               <TextField
                 name="name"
-                label="Category Name"
+                label={t('categoryName', 'Category Name')}
                 value={formData.name}
                 onChange={handleInputChange}
                 fullWidth
@@ -336,7 +351,7 @@ const Categories = () => {
             <Grid item xs={12}>
               <TextField
                 name="description"
-                label="Description"
+                label={t('description', 'Description')}
                 value={formData.description}
                 onChange={handleInputChange}
                 fullWidth
@@ -347,13 +362,13 @@ const Categories = () => {
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button onClick={handleCloseDialog}>{t('cancel', 'Cancel')}</Button>
           <Button
             onClick={handleSubmit}
             variant="contained"
             color="primary"
           >
-            {isEditing ? 'Update' : 'Create'}
+            {isEditing ? t('update', 'Update') : t('create', 'Create')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -364,17 +379,18 @@ const Categories = () => {
         onClose={() => setOpenDeleteDialog(false)}
         disableRestoreFocus
       >
-        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogTitle>{t('confirmDelete', 'Confirm Delete')}</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete the category "{categoryToDelete?.name}"?
-            This action cannot be undone, and it might fail if products are associated with it.
+            {t('deleteCategoryConfirm', 'Are you sure you want to delete the category "{{name}}"? This action cannot be undone, and it might fail if products are associated with it.', {
+              name: categoryToDelete?.name
+            })}
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDeleteDialog(false)}>Cancel</Button>
+          <Button onClick={() => setOpenDeleteDialog(false)}>{t('cancel', 'Cancel')}</Button>
           <Button onClick={handleDeleteConfirm} color="error" variant="contained">
-            Delete
+            {t('delete', 'Delete')}
           </Button>
         </DialogActions>
       </Dialog>

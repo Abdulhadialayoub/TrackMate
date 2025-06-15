@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { 
   Box, 
   AppBar,
@@ -20,6 +21,9 @@ import {
   useTheme,
   Collapse,
   ListItemButton,
+  Select,
+  FormControl,
+  InputAdornment,
 } from '@mui/material';
 import { 
   Menu as MenuIcon, 
@@ -39,6 +43,7 @@ import {
   ChevronRight,
   Category as CategoryIcon,
   Email as EmailIcon,
+  Translate as TranslateIcon,
 } from '@mui/icons-material';
 import { authService } from '../../services/api';
 import { motion } from 'framer-motion';
@@ -50,6 +55,7 @@ const AppLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
+  const { t, i18n } = useTranslation();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   const [anchorEl, setAnchorEl] = useState(null);
@@ -124,15 +130,20 @@ const AppLayout = () => {
   const handleMenuClose = () => {
     setAnchorEl(null);
   };
-  
+
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
-  
+
+  const handleProfileClick = () => {
+    handleMenuClose();
+    navigate('/profile');
+  };
+
   const handleLogout = () => {
     handleMenuClose();
     authService.logout();
-    navigate('/login');
+    navigate('/');
   };
 
   const handleAdminMenuToggle = () => {
@@ -147,29 +158,42 @@ const AppLayout = () => {
   const getMenuItems = () => {
     // All users see the same menu items
     return [
-      { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
-      { text: 'Products', icon: <InventoryIcon />, path: '/products' },
-      { text: 'Categories', icon: <CategoryIcon />, path: '/categories' },
-      { text: 'Customers', icon: <PeopleIcon />, path: '/customers' },
-      { text: 'Orders', icon: <OrdersIcon />, path: '/orders' },
-      { text: 'Invoices', icon: <InvoicesIcon />, path: '/invoices' },
-      //{ text: 'Messages', icon: <EmailIcon />, path: '/messages' },
+      { text: t('menuItems.dashboard'), icon: <DashboardIcon />, path: '/dashboard' },
+      { text: t('menuItems.products'), icon: <InventoryIcon />, path: '/products' },
+      { text: t('menuItems.categories'), icon: <CategoryIcon />, path: '/categories' },
+      { text: t('menuItems.customers'), icon: <PeopleIcon />, path: '/customers' },
+      { text: t('menuItems.orders'), icon: <OrdersIcon />, path: '/orders' },
+      { text: t('menuItems.invoices'), icon: <InvoicesIcon />, path: '/invoices' },
     ];
   };
   
   const menuItems = getMenuItems();
   
   const adminMenuItems = [
-    { text: 'User Management', icon: <PeopleIcon />, path: '/user-management' },
-    { text: 'Companies', icon: <BusinessIcon />, path: '/companies' },
-    { text: 'Activity Logs', icon: <ReceiptIcon />, path: '/activity-logs' },
+    { text: t('menuItems.userManagement'), icon: <PeopleIcon />, path: '/user-management' },
+    { text: t('menuItems.companies'), icon: <BusinessIcon />, path: '/companies' },
+    { text: t('menuItems.activityLogs'), icon: <ReceiptIcon />, path: '/activity-logs' },
   ];
   
   // Dev-only menu items
   const devMenuItems = [
-    { text: 'Developer Panel', icon: <DashboardIcon />, path: '/dev-panel' },
-    { text: 'Role Manager', icon: <SecurityIcon />, path: '/role-manager' },
+    { text: t('menuItems.developerPanel'), icon: <DashboardIcon />, path: '/dev-panel' },
+    { text: t('menuItems.roleManager'), icon: <SecurityIcon />, path: '/role-manager' },
   ];
+  
+  const handleLanguageChange = (event) => {
+    const newLang = event.target.value;
+    localStorage.setItem('i18nextLng', newLang);
+    i18n.changeLanguage(newLang);
+  };
+  
+  // Add useEffect to initialize language from localStorage
+  useEffect(() => {
+    const savedLang = localStorage.getItem('i18nextLng');
+    if (savedLang) {
+      i18n.changeLanguage(savedLang);
+    }
+  }, [i18n]);
   
   const drawer = (
     <div>
@@ -209,15 +233,13 @@ const AppLayout = () => {
           </ListItem>
         ))}
         
-        {/* Administration section removed as requested */}
-        
         {/* Developer Tools section - only visible to users with Dev role */}
         {userProfile?.role === 'Dev' && (
           <>
             <Divider sx={{ my: 1 }} />
             <ListItem sx={{ pl: 2, py: 0.5 }}>
               <ListItemText 
-                primary="DEVELOPER TOOLS" 
+                primary={t('developerTools', 'DEVELOPER TOOLS')}
                 primaryTypographyProps={{
                   variant: 'caption',
                   color: 'text.secondary',
@@ -251,15 +273,7 @@ const AppLayout = () => {
           </>
         )}
       </List>
-      <Divider />
-      <List>
-        <ListItem button onClick={handleLogout}>
-          <ListItemIcon>
-            <LogoutIcon />
-          </ListItemIcon>
-          <ListItemText primary="Logout" />
-        </ListItem>
-      </List>
+      
     </div>
   );
 
@@ -289,68 +303,41 @@ const AppLayout = () => {
           </IconButton>
           
           <Box sx={{ flexGrow: 1 }} />
+
+          <FormControl size="small" sx={{ minWidth: 100, mr: 2 }}>
+            <Select
+              value={i18n.language}
+              onChange={handleLanguageChange}
+              variant="outlined"
+              sx={{ height: 32 }}
+              startAdornment={
+                <InputAdornment position="start">
+                  <TranslateIcon sx={{ fontSize: 20 }} />
+                </InputAdornment>
+              }
+            >
+              <MenuItem value="en">English</MenuItem>
+              <MenuItem value="tr">Türkçe</MenuItem>
+            </Select>
+          </FormControl>
           
-          <Tooltip title="Account settings">
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <IconButton
               onClick={handleMenuOpen}
               size="small"
+              sx={{ ml: 2 }}
               aria-controls={Boolean(anchorEl) ? 'account-menu' : undefined}
               aria-haspopup="true"
               aria-expanded={Boolean(anchorEl) ? 'true' : undefined}
             >
-              <Avatar sx={{ width: 32, height: 32, bgcolor: theme.palette.primary.main }}>
-                {userProfile?.name?.charAt(0) || 'U'}
+              <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
+                {userProfile?.name?.charAt(0)?.toUpperCase() || 'U'}
               </Avatar>
             </IconButton>
-          </Tooltip>
-          
-          <Menu
-            anchorEl={anchorEl}
-            id="account-menu"
-            open={Boolean(anchorEl)}
-            onClose={handleMenuClose}
-            onClick={handleMenuClose}
-            transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-            anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-            PaperProps={{
-              elevation: 0,
-              sx: {
-                overflow: 'visible',
-                filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.1))',
-                mt: 1.5,
-                width: 200,
-                '& .MuiAvatar-root': {
-                  width: 32,
-                  height: 32,
-                  ml: -0.5,
-                  mr: 1,
-                },
-              },
-            }}
-          >
-            <Box sx={{ px: 2, py: 1 }}>
-              <Typography variant="subtitle1" noWrap>
-                {userProfile?.name || 'User'}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" noWrap>
-                {userProfile?.email || ''}
-              </Typography>
-            </Box>
-            <Divider />
-            <MenuItem onClick={() => { handleMenuClose(); navigate('/profile'); }}>
-              <ListItemIcon>
-                <AccountCircle fontSize="small" />
-              </ListItemIcon>
-              Profile
-            </MenuItem>
-            <Divider />
-            <MenuItem onClick={handleLogout}>
-              <ListItemIcon>
-                <LogoutIcon fontSize="small" />
-              </ListItemIcon>
-              Logout
-            </MenuItem>
-          </Menu>
+            <Typography variant="subtitle1" sx={{ ml: 1, display: { xs: 'none', sm: 'block' } }}>
+              {userProfile?.name || 'User'}
+            </Typography>
+          </Box>
         </Toolbar>
       </AppBar>
       
@@ -364,7 +351,7 @@ const AppLayout = () => {
           open={mobileOpen}
           onClose={handleDrawerToggle}
           ModalProps={{
-            keepMounted: true, // Better mobile performance
+            keepMounted: true,
           }}
           sx={{
             display: { xs: 'block', sm: 'none' },
@@ -422,6 +409,54 @@ const AppLayout = () => {
           <Outlet />
         </PageTransition>
       </Box>
+
+      <Menu
+        anchorEl={anchorEl}
+        id="account-menu"
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+        onClick={handleMenuClose}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+        PaperProps={{
+          elevation: 0,
+          sx: {
+            overflow: 'visible',
+            filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.1))',
+            mt: 1.5,
+            width: 200,
+            '& .MuiAvatar-root': {
+              width: 32,
+              height: 32,
+              ml: -0.5,
+              mr: 1,
+            },
+          },
+        }}
+      >
+        <Box sx={{ px: 2, py: 1 }}>
+          <Typography variant="subtitle1" noWrap>
+            {userProfile?.name || t('menuItems.user')}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" noWrap>
+            {userProfile?.email || ''}
+          </Typography>
+        </Box>
+        <Divider />
+        <MenuItem onClick={handleProfileClick}>
+          <ListItemIcon>
+            <AccountCircle fontSize="small" />
+          </ListItemIcon>
+          {t('menuItems.profile')}
+        </MenuItem>
+        <Divider />
+        <MenuItem onClick={handleLogout}>
+          <ListItemIcon>
+            <LogoutIcon fontSize="small" />
+          </ListItemIcon>
+          {t('menuItems.logout')}
+        </MenuItem>
+      </Menu>
     </Box>
   );
 };
